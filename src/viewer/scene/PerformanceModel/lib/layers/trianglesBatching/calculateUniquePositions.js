@@ -1,5 +1,5 @@
 /**
- * @author https://github.com/tmarti
+ * @author https://github.com/tmarti, with support from https://tribia.com/
  * @license MIT
  * 
  * This file takes a geometry given by { positions, indices }, and returns
