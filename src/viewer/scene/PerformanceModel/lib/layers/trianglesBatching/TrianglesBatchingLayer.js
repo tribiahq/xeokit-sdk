@@ -12,8 +12,10 @@ import {quantizePositions, transformAndOctEncodeNormals} from "../../compression
 import { Float16Array, isFloat16Array, getFloat16, setFloat16, hfround, } from "./float16.js";
 import * as uniquifyPositions from "./calculateUniquePositions.js";
 
-// 22-bits per-index
+// 22-bits allowed for indices
 const MAX_NUMBER_OF_UNIQUE_VERTICES_IN_BATCHING_LAYER = (1 << 22);
+// 10-bits allowed for object ids
+const MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER = (1 << 10);
 
 let _numTotalPolygons = 0;
 let _numTotalVertices = 0;
@@ -114,6 +116,8 @@ class TrianglesBatchingLayer {
 
         this._numUniqueVerts = 0;
 
+        this._numIndicesInLayer = 0;
+
         this._finalized = false;
 
         if (cfg.positionsDecodeMatrix) {
@@ -127,9 +131,7 @@ class TrianglesBatchingLayer {
         this._objectDataColors = [];
         this._objectDataPickColors = [];
 
-        this._indicesPostionMatrices = []; // chipmunk
-        this._newIndices = [];
-
+        this._maxIndexNumberForObjectId = []; // chipmunk
 
         if (cfg.origin) {
             this._state.origin = math.vec3(cfg.origin);
@@ -160,6 +162,11 @@ class TrianglesBatchingLayer {
             throw "Already finalized";
         }
 
+        if (this._numPortions >= MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER)
+        {
+            return false;
+        }
+        
         if (positions !== _lastCanCreatePortion.positions &&
             indices !== _lastCanCreatePortion.indices)
         {
@@ -401,9 +408,10 @@ class TrianglesBatchingLayer {
 
         if (indices) {
             for (let i = 0, len = indices.length; i < len; i++) {
-                this._indicesPostionMatrices.push (this._numPortions); // chupmunk
                 buffer.indices.push(indices[i] + vertsIndex);
             }
+            this._numIndicesInLayer += indices.length; // chupmunk
+            this._maxIndexNumberForObjectId.push (this._numIndicesInLayer); // chupmunk
         }
 
         if (edgeIndices) {
@@ -469,250 +477,52 @@ class TrianglesBatchingLayer {
         const buffer = this._buffer;
 
         // start of chipmunk
+        console.log (JSON.stringify({
+            'total-vertices-so-far': _numTotalVertices,
+            'unique-small-vertices-so-far': _numUniqueSmallVertices,
+            'total-polygons': _numTotalPolygons,
+            'ratio': (_numUniqueSmallVertices / _numTotalVertices * 100).toFixed(2)
+        }, null, 4));
 
-        // texture: flags, colors, etc. indexed per object-id
-        {
-            const texHeight = this._objectDataPositionsMatrices.length;
-            const texWidth = 4;
+        // Generate all the needed textures in the layer
 
-            const texArray = new Uint8Array (4 * texWidth * texHeight);
+        // a) colors and flags texture
+        const colorsAndFlagsTexture = this.generateTextureForColorsAndFlags (
+            gl,
+            this._objectDataColors,
+            this._objectDataPickColors
+        );
 
-            for (var i = 0; i < this._objectDataPositionsMatrices.length; i++)
-            {
-                // object color
-                texArray.set (
-                    this._objectDataColors [i],
-                    i * 16 + 0
-                );
+        state.objectDataTexture2 = colorsAndFlagsTexture.texture;
+        state.objectDataTextureHeight2 = colorsAndFlagsTexture.textureHeight;
 
-                // object pick color
-                texArray.set (
-                    this._objectDataPickColors [i],
-                    i * 16 + 4
-                );
+        // b) positions decode matrices texture
+        const decodeMatrixTexture = this.generateTextureForPositionsDecodeMatrices (
+            gl,
+            this._objectDataPositionsMatrices
+        ); 
 
-                // object flags
-                texArray.set (
-                    [
-                        0, 0, 0, 0
-                    ],
-                    i * 16 + 8
-                );
+        state.objectDataTexture = decodeMatrixTexture.texture;
+        state.objectDataTextureHeight = decodeMatrixTexture.textureHeight;
 
-                // object flags2
-                texArray.set (
-                    [
-                        0, 0, 0, 0
-                    ],
-                    i * 16 + 12
-                );
-            }
+        // c) normals texture
+        const normalsTexture = this.generateTextureForNormals (
+            gl,
+            buffer.indices,
+            buffer.normals
+        ); 
 
-            const texture = gl.createTexture();
+        state.normalsPerPolygonTexture = normalsTexture.texture;
+        state.normalsPerPolygonTextureHeight = normalsTexture.textureHeight;
 
-            gl.bindTexture (gl.TEXTURE_2D, texture);
+        // d) position coordinates texture
+        const positionsTexture = this.generateTextureForPositions (
+            gl,
+            buffer.positions
+        );
 
-            gl.texImage2D (
-                gl.TEXTURE_2D,
-                0,
-                gl.RGBA8UI,
-                texWidth,
-                texHeight,
-                0,
-                gl.RGBA_INTEGER,
-                gl.UNSIGNED_BYTE,
-                texArray,
-                0
-            );
-
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
-
-            state.objectDataTexture2 = texture;
-            state.objectDataTextureHeight2 = texHeight;
-
-            gl.bindTexture(gl.TEXTURE_2D, null);
-
-        }
-
-        // texture: positions decode matrices. indexed per object-id
-        {
-            const texHeight =  this._objectDataPositionsMatrices.length;
-
-            // 4 (positions matrix)
-            var texArray = new Float16Array(4 * 4 * texHeight);
-
-            var _offset = 0;
-
-            for (var i = 0; i < this._objectDataPositionsMatrices.length; i++)
-            {
-                // 4 values
-                texArray.set (
-                    this._objectDataPositionsMatrices [i],
-                    i * 16
-                );
-            }
-
-            const texture = gl.createTexture();
-
-            gl.bindTexture (gl.TEXTURE_2D, texture);
-
-            gl.texImage2D (
-                gl.TEXTURE_2D,
-                0,
-                gl.RGBA16F,
-                4,
-                texHeight,
-                0,
-                gl.RGBA,
-                gl.HALF_FLOAT,
-                new Uint16Array (texArray.buffer),
-                0
-            );
-
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
-
-            state.objectDataTexture = texture;
-            state.objectDataTextureHeight = texHeight;
-
-            gl.bindTexture(gl.TEXTURE_2D, null);
-        }
-
-        // texture: normals per-polygon. indexed per triangle-id (gl_VertedID / 3)
-        {
-            var normalsPerPolygon = [];
-
-            for (let i = 0; i < buffer.indices.length; i+=3)
-            {
-                normalsPerPolygon.push (
-                    buffer.normals [buffer.indices[i] * 3 + 0],
-                    buffer.normals [buffer.indices[i] * 3 + 1]
-                );
-            }
-
-            const texWidth = 512;
-            const texHeight = Math.ceil (normalsPerPolygon.length / texWidth);
-
-            // padding
-            for (let i = normalsPerPolygon.length; i < texWidth * texHeight * 2; i++)
-            {
-                normalsPerPolygon.push (0);
-            }
-
-            var texArray = new Int8Array (normalsPerPolygon);
-
-            const texture = gl.createTexture();
-
-            gl.bindTexture (gl.TEXTURE_2D, texture);
-
-            gl.texImage2D (
-                gl.TEXTURE_2D,
-                0,
-                gl.RG8I,
-                texWidth,
-                texHeight,
-                0,
-                gl.RG_INTEGER,
-                gl.BYTE,
-                texArray
-            );
-
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-            state.normalsPerPolygonTexture = texture;
-            state.normalsPerPolygonTextureHeight = texHeight;
-
-            gl.bindTexture(gl.TEXTURE_2D, null);
-        }
-
-        // texture: unique positions XYZ's. indexed per unique-vertex-id
-        {
-            console.log (JSON.stringify({
-                'total-vertices-so-far': _numTotalVertices,
-                'unique-small-vertices-so-far': _numUniqueSmallVertices,
-                'total-polygons': _numTotalPolygons,
-                'ratio': (_numUniqueSmallVertices / _numTotalVertices * 100).toFixed(2)
-            }, null, 4));
-
-            var uniquePositions = buffer.positions;
-
-            for (let i = 0; i < buffer.indices.length; i++)
-            {
-                // This loop will iterate (3 * number-triangles) in the layer
-
-                // Each iteration is a vertex index
-
-                // Uint22
-                let uniqueVertexIndex = buffer.indices [i];
-
-                // Unit10
-                let objectId = this._indicesPostionMatrices[i];
-
-                // Upper 16 bits contain upper 16 bits of uniqueVertexIndex-22-bits
-                var upper16Bits = uniqueVertexIndex >> (22 - 16);
-
-                // Lower 16 bits contain:
-                // - lower 10 bits: objectId
-                // - upper 6 bits: lower 6 bits of uniqueVertexIndex-22-bits
-                var lower16Bits =
-                    ((uniqueVertexIndex & 63) << 10) +
-                    (objectId & 1023);
-
-                this._newIndices.push (upper16Bits);
-                this._newIndices.push (lower16Bits);
-            }
-
-            this._indicesPostionMatrices = null;
-
-            const texWidth = 512 * 3;
-            const texHeight =  Math.ceil (uniquePositions.length / texWidth);
-
-            var texArray = new Uint16Array(texWidth*texHeight);
-
-            // padding
-            for (var i = uniquePositions.length; i < texArray.length; i++)
-            {
-                uniquePositions.push(0);
-            }
-
-            const texturePositions = gl.createTexture();
-
-            gl.bindTexture (gl.TEXTURE_2D, texturePositions);
-
-            var val = new Uint16Array (uniquePositions);
-
-            gl.texImage2D (
-                gl.TEXTURE_2D,
-                0,
-                gl.RGB16UI,
-                texWidth / 3,
-                texHeight,
-                0,
-                gl.RGB_INTEGER,
-                gl.UNSIGNED_SHORT,
-                val    
-            );
-
-            uniquePositions = null;
-
-            gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
-
-            state.positionsTexture = texturePositions;
-            state.positionsTextureHeight = texHeight;
-
-            gl.bindTexture(gl.TEXTURE_2D, null);
-        }
+        state.positionsTexture = positionsTexture.texture;
+        state.positionsTextureHeight = positionsTexture.textureHeight;
 
         // end of chipmunk
 
@@ -731,20 +541,338 @@ class TrianglesBatchingLayer {
 
         const bigIndicesSupported = WEBGL_INFO.SUPPORTED_EXTENSIONS["OES_element_index_uint"];
 
-        if (this._newIndices.length > 0) {
-            const indices = new Uint16Array(this._newIndices);
+        if (buffer.indices.length > 0) {
+            const indices = this.generatePackedIndicesTypedArray (
+                buffer.indices,
+                this._maxIndexNumberForObjectId
+            );
 
-            state.indicesBuf = new ArrayBuf(gl, gl.ARRAY_BUFFER, indices, this._newIndices.length, 2, gl.STATIC_DRAW);
+            state.indicesBuf = new ArrayBuf(gl, gl.ARRAY_BUFFER, indices, indices.length, 2, gl.STATIC_DRAW);
 
             state.numTriangles = Math.floor (indices.length / 2);
 
-            this._newIndices = null;
+            this._maxIndexNumberForObjectId = null;
         }
 
         this._buffer = null;
         this._finalized = true;
     }
 
+    /**
+     * This will generate an RGBA texture for:
+     * - colors
+     * - pickColors
+     * - flags
+     * - flags2
+     * 
+     * The texture will have:
+     * - 4 RGBA columns per row: for each object (pick) color and flags(2)
+     * - N rows where N is the number of objects
+     * 
+     * @param {*} gl WebGL2Context 
+     * @param {*} colors Array of colors for all objects in the layer
+     * @param {*} pickColors Array of pickColors for all objects in the layer
+     * 
+     * @returns The created texture and its height
+     */
+    generateTextureForColorsAndFlags (gl, colors, pickColors) {
+        // The number of rows in the texture is the number of
+        // objects in the layer.
+        const textureHeight = colors.length;
+
+        // 4 columns per texture row:
+        // - col0: (RGBA) object color RGBA
+        // - col1: (packed Uint32 as RGBA) object pick color
+        // - col2: (packed 4 bytes as RGBA) object flags
+        // - col3: (packed 4 bytes as RGBA) object flags2
+        const textureWidth = 4;
+
+        const texArray = new Uint8Array (4 * textureWidth * textureHeight);
+
+        for (var i = 0; i < textureHeight; i++)
+        {
+            // object color
+            texArray.set (
+                colors [i],
+                i * 16 + 0
+            );
+
+            // object pick color
+            texArray.set (
+                pickColors [i],
+                i * 16 + 4
+            );
+
+            // object flags
+            texArray.set (
+                [
+                    0, 0, 0, 0
+                ],
+                i * 16 + 8
+            );
+
+            // object flags2
+            texArray.set (
+                [
+                    0, 0, 0, 0
+                ],
+                i * 16 + 12
+            );
+        }
+
+        const texture = gl.createTexture();
+
+        gl.bindTexture (gl.TEXTURE_2D, texture);
+
+        gl.texImage2D (
+            gl.TEXTURE_2D,
+            0,
+            gl.RGBA8UI,
+            textureWidth,
+            textureHeight,
+            0,
+            gl.RGBA_INTEGER,
+            gl.UNSIGNED_BYTE,
+            texArray,
+            0
+        );
+
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+
+        gl.bindTexture(gl.TEXTURE_2D, null);
+
+        return {
+            texture,
+            textureHeight
+        };
+    }
+
+    /**
+     * This will generate a texture for all positions decode matrices in the layer.
+     * 
+     * The texture will have:
+     * - 4 RGBA columns per row (each column will contain 4 packed half-float (16 bits) components).
+     *   Thus, each row will contain 16 packed half-floats corresponding to a complete positions decode matrix)
+     * - N rows where N is the number of objects
+     * 
+     * @param {*} gl WebGL2Context 
+     * @param {*} positionDecodeMatrices Array of positions decode matrices for all objects in the layer
+     * 
+     * @returns The created texture and its height
+     */
+    generateTextureForPositionsDecodeMatrices (gl, positionDecodeMatrices) {
+        const textureHeight =  positionDecodeMatrices.length;
+        const textureWidth = 4;
+
+        var texArray = new Float16Array(4 * textureWidth * textureHeight);
+
+        for (var i = 0; i < positionDecodeMatrices.length; i++)
+        {
+            // 4 values
+            texArray.set (
+                positionDecodeMatrices [i],
+                i * 16
+            );
+        }
+
+        const texture = gl.createTexture();
+
+        gl.bindTexture (gl.TEXTURE_2D, texture);
+
+        gl.texImage2D (
+            gl.TEXTURE_2D,
+            0,
+            gl.RGBA16F,
+            textureWidth,
+            textureHeight,
+            0,
+            gl.RGBA,
+            gl.HALF_FLOAT,
+            new Uint16Array (texArray.buffer),
+            0
+        );
+
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+
+        gl.bindTexture(gl.TEXTURE_2D, null);
+
+        return {
+            texture,
+            textureHeight
+        };
+    }
+
+    /**
+     * This will generate a texture for all normals in the layer.
+     * 
+     * The texture will contain just one normal per triangle, instead of one normal per vertex.
+     *
+     * At the moment, it is just taking the normal corresponding to the 1st vertex for each triangle.
+     *  
+     * The texture will have:
+     * - 512 16-bit (encoded as RG 8-bit components) columns
+     * - a number of rows R where R*512 is just >= than the number of triangles
+     * 
+     * @param {*} gl WebGL2Context 
+     * @param {*} indices Array of indices for the layer
+     * @param {*} normals Array of normals for the layer
+     * 
+     * @returns The created texture and its height
+     */
+    generateTextureForNormals (gl, indices, normals) {
+        const textureWidth = 512;
+        const textureHeight = Math.ceil (indices.length / textureWidth);
+
+        const texArraySize = textureWidth * textureHeight * 2
+        const texArray = new Int8Array (texArraySize);
+
+        texArray.fill(0);
+
+        for (let i = 0, j = 0, indicesLen = indices.length; i < indicesLen; i+=3, j+=2)
+        {
+            texArray [j] = normals [indices[i] * 3 + 0];
+            texArray [j+1] = normals [indices[i] * 3 + 0];
+        }
+
+        const texture = gl.createTexture();
+
+        gl.bindTexture (gl.TEXTURE_2D, texture);
+
+        gl.texImage2D (
+            gl.TEXTURE_2D,
+            0,
+            gl.RG8I,
+            textureWidth,
+            textureHeight,
+            0,
+            gl.RG_INTEGER,
+            gl.BYTE,
+            texArray
+        );
+
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+        gl.bindTexture(gl.TEXTURE_2D, null);
+
+        return {
+            texture,
+            textureHeight
+        };
+    }
+
+    /**
+     * @param {*} gl WebGL2Context 
+     * @param {*} positions Array of (uniquified) positions in the layer
+     * 
+     * This will generate a texture for positions in the layer.
+     * 
+     * The texture will have:
+     * - 512 columns, where each pixel will be a 16-bit-per-component RGB texture, corresponding to the XYZ of the position 
+     * - a number of rows R where R*512 is just >= than the number of vertices (positions / 3)
+     * 
+     * @returns The created texture and its height
+     */
+    generateTextureForPositions (gl, positions) {
+        const numVertices = positions.length / 3;
+        const textureWidth = 512;
+        const textureHeight =  Math.ceil (numVertices / textureWidth);
+
+        const texArraySize = textureWidth * textureHeight * 3;
+        const texArray = new Uint16Array (texArraySize);
+
+        texArray.fill(0);
+
+        texArray.set (positions, 0);
+
+        const texture = gl.createTexture();
+
+        gl.bindTexture (gl.TEXTURE_2D, texture);
+
+        gl.texImage2D (
+            gl.TEXTURE_2D,
+            0,
+            gl.RGB16UI,
+            textureWidth,
+            textureHeight,
+            0,
+            gl.RGB_INTEGER,
+            gl.UNSIGNED_SHORT,
+            texArray    
+        );
+
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+
+        gl.bindTexture(gl.TEXTURE_2D, null);
+
+        return {
+            texture,
+            textureHeight
+        };
+    }
+
+        /**
+     * This will convert the indices array into a packed indices array.
+     * 
+     * TODO: provide explanation here.
+     * 
+     * @param {*} indices The array of indices in the layer.
+     * 
+     * @returns The packed indices array
+     */
+    generatePackedIndicesTypedArray (indices, maxIndexForObjectIds) {
+        const lenIndices = indices.length;
+
+        let retVal = new Uint16Array(lenIndices*2);
+
+        let objectId = 0;
+        let maxIndexForObjectId = maxIndexForObjectIds[objectId];
+
+        for (let i = 0; i < lenIndices; i++)
+        {
+            // This loop will iterate (3 * number-triangles) in the layer
+
+            // Each iteration is a vertex index
+
+            // Uint22
+            let uniqueVertexIndex = indices [i];
+
+            // Unit10
+            // let objectId = this._objectIdForIndices[i];
+            if (i >= maxIndexForObjectId)
+            {
+                objectId++;
+                maxIndexForObjectId = maxIndexForObjectIds[objectId];
+            }
+
+            // Upper 16 bits contain upper 16 bits of uniqueVertexIndex-22-bits
+            var upper16Bits = uniqueVertexIndex >> (22 - 16);
+
+            // Lower 16 bits contain:
+            // - lower 10 bits: objectId
+            // - upper 6 bits: lower 6 bits of uniqueVertexIndex-22-bits
+            var lower16Bits =
+                ((uniqueVertexIndex & 63) << 10) +
+                (objectId & 1023);
+
+            retVal[i*2] = upper16Bits;
+            retVal[i*2+1] = lower16Bits;
+        }
+
+        return retVal;
+    }
+        
     isEmpty() {
         return (!this._state.indicesBuf);
     }
