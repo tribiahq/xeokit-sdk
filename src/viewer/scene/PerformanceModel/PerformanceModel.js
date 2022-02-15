@@ -2127,6 +2127,10 @@ class PerformanceModel extends Component {
                 case "solid":
                 case "surface":
 
+                    if (!edgeIndices) {
+                        edgeIndices = buildEdgeIndices(positions, indices, null, this._edgeThreshold);
+                    }
+                    
                     if (layer) {
                         if (!layer.canCreatePortion(positions, indices, edgeIndices)) {
                             layer.finalize();
@@ -2153,10 +2157,6 @@ class PerformanceModel extends Component {
                     // chipmunk TODO: not the case when loading XKT files
                     layer._positionsDecodeMatrix = cfg.positionsDecodeMatrix; // chipmuk
                     // layer._positionsDecodeMatrix = [ 0.001, 0, 0, 0, 0, 0.001, 0, 0, 0, 0, 0.001, 0, 0, Math.random()*200, 0, 1, ]; // chipmuk
-
-                    if (!edgeIndices) {
-                        edgeIndices = buildEdgeIndices(positions, indices, null, this._edgeThreshold);
-                    }
 
                     portionId = layer.createPortion({
                         positions: positions,
