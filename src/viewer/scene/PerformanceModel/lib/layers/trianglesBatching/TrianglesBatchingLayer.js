@@ -9,6 +9,22 @@ import {geometryCompressionUtils} from "../../../../math/geometryCompressionUtil
 import {getBatchingRenderers} from "./TrianglesBatchingRenderers.js";
 import {TrianglesBatchingBuffer} from "./TrianglesBatchingBuffer.js";
 import {quantizePositions, transformAndOctEncodeNormals} from "../../compression.js";
+import { Float16Array, isFloat16Array, getFloat16, setFloat16, hfround, } from "./float16.js";
+import * as uniquifyPositions from "./calculateUniquePositions.js";
+
+// 22-bits per-index
+const MAX_NUMBER_OF_UNIQUE_VERTICES_IN_BATCHING_LAYER = (1 << 22);
+
+let _numTotalPolygons = 0;
+let _numTotalVertices = 0;
+let _numUniqueSmallVertices = 0;
+
+let _lastCanCreatePortion = {
+    positions: null,
+    indices: null,
+    uniquePositions: null,
+    uniqueIndices: null
+};
 
 const tempMat4 = math.mat4();
 const tempMat4b = math.mat4();
@@ -16,6 +32,8 @@ const tempVec4a = math.vec4([0, 0, 0, 1]);
 const tempVec4b = math.vec4([0, 0, 0, 1]);
 const tempVec4c = math.vec4([0, 0, 0, 1]);
 const tempOBB3 = math.OBB3();
+
+const tempUint8Array4 = new Uint8Array (4);
 
 const tempVec3a = math.vec3();
 const tempVec3b = math.vec3();
@@ -70,7 +88,11 @@ class TrianglesBatchingLayer {
             flags2Buf: null,
             indicesBuf: null,
             edgeIndicesBuf: null,
-            positionsDecodeMatrix: math.mat4()
+            positionsDecodeMatrix: math.mat4(),
+            objectDataTexture: null,
+            objectDataTextureHeight: null,
+            positionsTexture: null,
+            positionsTextureHeight: null,
         });
 
         // These counts are used to avoid unnecessary render passes
@@ -90,6 +112,8 @@ class TrianglesBatchingLayer {
 
         this._numVerts = 0;
 
+        this._numUniqueVerts = 0;
+
         this._finalized = false;
 
         if (cfg.positionsDecodeMatrix) {
@@ -98,6 +122,14 @@ class TrianglesBatchingLayer {
         } else {
             this._preCompressed = false;
         }
+
+        this._objectDataPositionsMatrices = []; // chipmunk
+        this._objectDataColors = [];
+        this._objectDataPickColors = [];
+
+        this._indicesPostionMatrices = []; // chipmunk
+        this._newIndices = [];
+
 
         if (cfg.origin) {
             this._state.origin = math.vec3(cfg.origin);
@@ -123,11 +155,40 @@ class TrianglesBatchingLayer {
      * @param lenIndices Number of indices we'd like to create in this portion.
      * @returns {boolean} True if OK to create another portion.
      */
-    canCreatePortion(lenPositions, lenIndices) {
+    canCreatePortion(positions, indices) {
         if (this._finalized) {
             throw "Already finalized";
         }
-        return ((this._buffer.positions.length + lenPositions) < (this._buffer.maxVerts * 3) && (this._buffer.indices.length + lenIndices) < (this._buffer.maxIndices));
+
+        if (positions !== _lastCanCreatePortion.positions &&
+            indices !== _lastCanCreatePortion.indices)
+        {
+            _numTotalVertices += positions.length;
+            _numTotalPolygons += indices.length / 3;
+        }
+
+        _lastCanCreatePortion.positions = positions;
+        _lastCanCreatePortion.indices = indices;
+
+        [
+            _lastCanCreatePortion.uniquePositions,
+            _lastCanCreatePortion.uniqueIndices
+        ] = uniquifyPositions.uniquifyPositions ({
+            positions,
+            indices
+        });
+
+        _numUniqueSmallVertices = _numUniqueSmallVertices + _lastCanCreatePortion.uniquePositions.length;
+
+        let retVal = (this._numUniqueVerts + (_lastCanCreatePortion.uniquePositions.length / 3)) <= MAX_NUMBER_OF_UNIQUE_VERTICES_IN_BATCHING_LAYER;
+
+        if (!retVal)
+        {
+            console.log ("Cannot create portion!");
+            console.log (this._numUniqueVerts + (_lastCanCreatePortion.uniquePositions.length / 3));
+        }
+
+        return retVal;
     }
 
     /**
@@ -151,10 +212,27 @@ class TrianglesBatchingLayer {
      * @returns {number} Portion ID
      */
     createPortion(cfg) {
-
         if (this._finalized) {
             throw "Already finalized";
         }
+
+        if (cfg.positions === _lastCanCreatePortion.positions &&
+            cfg.indices === _lastCanCreatePortion.indices) {
+                cfg.positions = _lastCanCreatePortion.positions;
+                cfg.indices = _lastCanCreatePortion.indices;    
+        } else {
+            [
+                cfg.positions,
+                cfg.indices
+            ] = uniquifyPositions.uniquifyPositions ({
+                positions: cfg.positions,
+                indices: cfg.indices
+            });
+        }
+
+        this._numUniqueVerts += cfg.positions.length / 3;
+
+        this._objectDataPositionsMatrices.push (this._positionsDecodeMatrix);
 
         const positions = cfg.positions;
         const normals = cfg.normals;
@@ -176,6 +254,11 @@ class TrianglesBatchingLayer {
         const vertsIndex = positionsIndex / 3;
         const numVerts = positions.length / 3;
         const lenPositions = positions.length;
+
+        for (let i = 0; i < numVerts; i++)
+        {
+            buffer.objectData.push (this._numPortions); // chipmunk
+        }
 
         if (this._preCompressed) {
 
@@ -289,38 +372,36 @@ class TrianglesBatchingLayer {
         }
 
         if (colors) {
+            // start of chipmunk
+            this._objectDataColors.push ([
+                colors[0] * 255,
+                colors[1] * 255,
+                colors[2] * 255,
+                255
+            ]);
 
-            for (let i = 0, len = colors.length; i < len; i += 3) {
-                buffer.colors.push(colors[i] * 255);
-                buffer.colors.push(colors[i + 1] * 255);
-                buffer.colors.push(colors[i + 2] * 255);
-                buffer.colors.push(255);
-            }
+            this._colorsLength = (this._colorsLength || 0) + colors.length * 4;
+            // end of chipmunk
 
         } else if (color) {
-
             const r = color[0]; // Color is pre-quantized by PerformanceModel
             const g = color[1];
             const b = color[2];
             const a = opacity;
 
-            const metallicValue = (metallic !== null && metallic !== undefined) ? metallic : 0;
-            const roughnessValue = (roughness !== null && roughness !== undefined) ? roughness : 255;
-
-            for (let i = 0; i < numVerts; i++) {
-
-                buffer.colors.push(r);
-                buffer.colors.push(g);
-                buffer.colors.push(b);
-                buffer.colors.push(a);
-
-                buffer.metallicRoughness.push(metallicValue);
-                buffer.metallicRoughness.push(roughnessValue);
-            }
+            // start of chipmunk
+            this._objectDataColors.push ([
+                r,
+                g,
+                b,
+                opacity
+            ]);
+            // end of chipmunk
         }
 
         if (indices) {
             for (let i = 0, len = indices.length; i < len; i++) {
+                this._indicesPostionMatrices.push (this._numPortions); // chupmunk
                 buffer.indices.push(indices[i] + vertsIndex);
             }
         }
@@ -331,16 +412,11 @@ class TrianglesBatchingLayer {
             }
         }
 
-        {
-            const pickColorsBase = buffer.pickColors.length;
-            const lenPickColors = numVerts * 4;
-            for (let i = pickColorsBase, len = pickColorsBase + lenPickColors; i < len; i += 4) {
-                buffer.pickColors.push(pickColor[0]);
-                buffer.pickColors.push(pickColor[1]);
-                buffer.pickColors.push(pickColor[2]);
-                buffer.pickColors.push(pickColor[3]);
-            }
-        }
+        // start of chipmunk
+        this._objectDataPickColors.push (
+            pickColor
+        );
+        // end of chipmunk
 
         if (scene.entityOffsetsEnabled) {
             for (let i = 0; i < numVerts; i++) {
@@ -392,75 +468,279 @@ class TrianglesBatchingLayer {
         const gl = this.model.scene.canvas.gl;
         const buffer = this._buffer;
 
-        if (buffer.positions.length > 0) {
+        // start of chipmunk
 
-            const quantizedPositions = (this._preCompressed)
-                ? new Uint16Array(buffer.positions)
-                : quantizePositions(buffer.positions, this._modelAABB, state.positionsDecodeMatrix); // BOTTLENECK
+        // texture: flags, colors, etc. indexed per object-id
+        {
+            const texHeight = this._objectDataPositionsMatrices.length;
+            const texWidth = 4;
 
-            state.positionsBuf = new ArrayBuf(gl, gl.ARRAY_BUFFER, quantizedPositions, quantizedPositions.length, 3, gl.STATIC_DRAW);
+            const texArray = new Uint8Array (4 * texWidth * texHeight);
 
-            if (this.model.scene.pickSurfacePrecisionEnabled) {
-                for (let i = 0, numPortions = this._portions.length; i < numPortions; i++) {
-                    const portion = this._portions[i];
-                    const start = portion.vertsBase * 3;
-                    const end = start + (portion.numVerts * 3);
-                    portion.quantizedPositions = quantizedPositions.slice(start, end);
-                }
+            for (var i = 0; i < this._objectDataPositionsMatrices.length; i++)
+            {
+                // object color
+                texArray.set (
+                    this._objectDataColors [i],
+                    i * 16 + 0
+                );
+
+                // object pick color
+                texArray.set (
+                    this._objectDataPickColors [i],
+                    i * 16 + 4
+                );
+
+                // object flags
+                texArray.set (
+                    [
+                        0, 0, 0, 0
+                    ],
+                    i * 16 + 8
+                );
+
+                // object flags2
+                texArray.set (
+                    [
+                        0, 0, 0, 0
+                    ],
+                    i * 16 + 12
+                );
             }
+
+            const texture = gl.createTexture();
+
+            gl.bindTexture (gl.TEXTURE_2D, texture);
+
+            gl.texImage2D (
+                gl.TEXTURE_2D,
+                0,
+                gl.RGBA8UI,
+                texWidth,
+                texHeight,
+                0,
+                gl.RGBA_INTEGER,
+                gl.UNSIGNED_BYTE,
+                texArray,
+                0
+            );
+
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+
+            state.objectDataTexture2 = texture;
+            state.objectDataTextureHeight2 = texHeight;
+
+            gl.bindTexture(gl.TEXTURE_2D, null);
+
         }
 
-        if (buffer.normals.length > 0) {
-            const normals = new Int8Array(buffer.normals);
-            let normalized = true; // For oct encoded UInts
-            state.normalsBuf = new ArrayBuf(gl, gl.ARRAY_BUFFER, normals, buffer.normals.length, 3, gl.STATIC_DRAW, normalized);
-        }
+        // texture: positions decode matrices. indexed per object-id
+        {
+            const texHeight =  this._objectDataPositionsMatrices.length;
 
-        if (buffer.colors.length > 0) {
-            const colors = new Uint8Array(buffer.colors);
-            let normalized = false;
-            state.colorsBuf = new ArrayBuf(gl, gl.ARRAY_BUFFER, colors, buffer.colors.length, 4, gl.DYNAMIC_DRAW, normalized);
-        }
+            // 4 (positions matrix)
+            var texArray = new Float16Array(4 * 4 * texHeight);
 
-        if (buffer.metallicRoughness.length > 0) {
-            const metallicRoughness = new Uint8Array(buffer.metallicRoughness);
-            let normalized = false;
-            state.metallicRoughnessBuf = new ArrayBuf(gl, gl.ARRAY_BUFFER, metallicRoughness, buffer.metallicRoughness.length, 2, gl.STATIC_DRAW, normalized);
-        }
+            var _offset = 0;
 
-        if (buffer.positions.length > 0) { // Because we build flags arrays here, get their length from the positions array
-            const flagsLength = (buffer.positions.length / 3) * 4;
-            const flags = new Uint8Array(flagsLength);
-            const flags2 = new Uint8Array(flagsLength);
-            let notNormalized = false;
-            let normalized = true;
-            state.flagsBuf = new ArrayBuf(gl, gl.ARRAY_BUFFER, flags, flags.length, 4, gl.DYNAMIC_DRAW, notNormalized);
-            state.flags2Buf = new ArrayBuf(gl, gl.ARRAY_BUFFER, flags2, flags2.length, 4, gl.DYNAMIC_DRAW, normalized);
-        }
-
-        if (buffer.pickColors.length > 0) {
-            const pickColors = new Uint8Array(buffer.pickColors);
-            let normalized = false;
-            state.pickColorsBuf = new ArrayBuf(gl, gl.ARRAY_BUFFER, pickColors, buffer.pickColors.length, 4, gl.STATIC_DRAW, normalized);
-        }
-
-        if (this.model.scene.entityOffsetsEnabled) {
-            if (buffer.offsets.length > 0) {
-                const offsets = new Float32Array(buffer.offsets);
-                state.offsetsBuf = new ArrayBuf(gl, gl.ARRAY_BUFFER, offsets, buffer.offsets.length, 3, gl.DYNAMIC_DRAW);
+            for (var i = 0; i < this._objectDataPositionsMatrices.length; i++)
+            {
+                // 4 values
+                texArray.set (
+                    this._objectDataPositionsMatrices [i],
+                    i * 16
+                );
             }
+
+            const texture = gl.createTexture();
+
+            gl.bindTexture (gl.TEXTURE_2D, texture);
+
+            gl.texImage2D (
+                gl.TEXTURE_2D,
+                0,
+                gl.RGBA16F,
+                4,
+                texHeight,
+                0,
+                gl.RGBA,
+                gl.HALF_FLOAT,
+                new Uint16Array (texArray.buffer),
+                0
+            );
+
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+
+            state.objectDataTexture = texture;
+            state.objectDataTextureHeight = texHeight;
+
+            gl.bindTexture(gl.TEXTURE_2D, null);
         }
+
+        // texture: normals per-polygon. indexed per triangle-id (gl_VertedID / 3)
+        {
+            var normalsPerPolygon = [];
+
+            for (let i = 0; i < buffer.indices.length; i+=3)
+            {
+                normalsPerPolygon.push (
+                    buffer.normals [buffer.indices[i] * 3 + 0],
+                    buffer.normals [buffer.indices[i] * 3 + 1]
+                );
+            }
+
+            const texWidth = 512;
+            const texHeight = Math.ceil (normalsPerPolygon.length / texWidth);
+
+            // padding
+            for (let i = normalsPerPolygon.length; i < texWidth * texHeight * 2; i++)
+            {
+                normalsPerPolygon.push (0);
+            }
+
+            var texArray = new Int8Array (normalsPerPolygon);
+
+            const texture = gl.createTexture();
+
+            gl.bindTexture (gl.TEXTURE_2D, texture);
+
+            gl.texImage2D (
+                gl.TEXTURE_2D,
+                0,
+                gl.RG8I,
+                texWidth,
+                texHeight,
+                0,
+                gl.RG_INTEGER,
+                gl.BYTE,
+                texArray
+            );
+
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+            state.normalsPerPolygonTexture = texture;
+            state.normalsPerPolygonTextureHeight = texHeight;
+
+            gl.bindTexture(gl.TEXTURE_2D, null);
+        }
+
+        // texture: unique positions XYZ's. indexed per unique-vertex-id
+        {
+            console.log (JSON.stringify({
+                'total-vertices-so-far': _numTotalVertices,
+                'unique-small-vertices-so-far': _numUniqueSmallVertices,
+                'total-polygons': _numTotalPolygons,
+                'ratio': (_numUniqueSmallVertices / _numTotalVertices * 100).toFixed(2)
+            }, null, 4));
+
+            var uniquePositions = buffer.positions;
+
+            for (let i = 0; i < buffer.indices.length; i++)
+            {
+                // This loop will iterate (3 * number-triangles) in the layer
+
+                // Each iteration is a vertex index
+
+                // Uint22
+                let uniqueVertexIndex = buffer.indices [i];
+
+                // Unit10
+                let objectId = this._indicesPostionMatrices[i];
+
+                // Upper 16 bits contain upper 16 bits of uniqueVertexIndex-22-bits
+                var upper16Bits = uniqueVertexIndex >> (22 - 16);
+
+                // Lower 16 bits contain:
+                // - lower 10 bits: objectId
+                // - upper 6 bits: lower 6 bits of uniqueVertexIndex-22-bits
+                var lower16Bits =
+                    ((uniqueVertexIndex & 63) << 10) +
+                    (objectId & 1023);
+
+                this._newIndices.push (upper16Bits);
+                this._newIndices.push (lower16Bits);
+            }
+
+            this._indicesPostionMatrices = null;
+
+            const texWidth = 512 * 3;
+            const texHeight =  Math.ceil (uniquePositions.length / texWidth);
+
+            var texArray = new Uint16Array(texWidth*texHeight);
+
+            // padding
+            for (var i = uniquePositions.length; i < texArray.length; i++)
+            {
+                uniquePositions.push(0);
+            }
+
+            const texturePositions = gl.createTexture();
+
+            gl.bindTexture (gl.TEXTURE_2D, texturePositions);
+
+            var val = new Uint16Array (uniquePositions);
+
+            gl.texImage2D (
+                gl.TEXTURE_2D,
+                0,
+                gl.RGB16UI,
+                texWidth / 3,
+                texHeight,
+                0,
+                gl.RGB_INTEGER,
+                gl.UNSIGNED_SHORT,
+                val    
+            );
+
+            uniquePositions = null;
+
+            gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+
+            state.positionsTexture = texturePositions;
+            state.positionsTextureHeight = texHeight;
+
+            gl.bindTexture(gl.TEXTURE_2D, null);
+        }
+
+        // end of chipmunk
+
+        // if (buffer.metallicRoughness.length > 0) {
+        //     const metallicRoughness = new Uint8Array(buffer.metallicRoughness);
+        //     let normalized = false;
+        //     state.metallicRoughnessBuf = new ArrayBuf(gl, gl.ARRAY_BUFFER, metallicRoughness, buffer.metallicRoughness.length, 2, gl.STATIC_DRAW, normalized);
+        // }
+
+        // if (this.model.scene.entityOffsetsEnabled) {
+        //     if (buffer.offsets.length > 0) {
+        //         const offsets = new Float32Array(buffer.offsets);
+        //         state.offsetsBuf = new ArrayBuf(gl, gl.ARRAY_BUFFER, offsets, buffer.offsets.length, 3, gl.DYNAMIC_DRAW);
+        //     }
+        // }
 
         const bigIndicesSupported = WEBGL_INFO.SUPPORTED_EXTENSIONS["OES_element_index_uint"];
 
-        if (buffer.indices.length > 0) {
-            const indices = bigIndicesSupported ? new Uint32Array(buffer.indices) : new Uint16Array(buffer.indices);
-            state.indicesBuf = new ArrayBuf(gl, gl.ELEMENT_ARRAY_BUFFER, indices, buffer.indices.length, 1, gl.STATIC_DRAW);
+        if (this._newIndices.length > 0) {
+            const indices = new Uint16Array(this._newIndices);
+
+            state.indicesBuf = new ArrayBuf(gl, gl.ARRAY_BUFFER, indices, this._newIndices.length, 2, gl.STATIC_DRAW);
+
+            state.numTriangles = Math.floor (indices.length / 2);
+
+            this._newIndices = null;
         }
-        if (buffer.edgeIndices.length > 0) {
-            const edgeIndices = bigIndicesSupported ? new Uint32Array(buffer.edgeIndices) : new Uint16Array(buffer.edgeIndices);
-            state.edgeIndicesBuf = new ArrayBuf(gl, gl.ELEMENT_ARRAY_BUFFER, edgeIndices, buffer.edgeIndices.length, 1, gl.STATIC_DRAW);
-        }
+
         this._buffer = null;
         this._finalized = true;
     }
@@ -672,17 +952,10 @@ class TrianglesBatchingLayer {
     }
 
     _setFlags(portionId, flags, transparent, deferred = false) {
-
         if (!this._finalized) {
             throw "Not finalized";
         }
 
-        const portionsIdx = portionId;
-        const portion = this._portions[portionsIdx];
-        const vertexBase = portion.vertsBase;
-        const numVerts = portion.numVerts;
-        const firstFlag = vertexBase * 4;
-        const lenFlags = numVerts * 4;
 
         const visible = !!(flags & ENTITY_FLAGS.VISIBLE);
         const xrayed = !!(flags & ENTITY_FLAGS.XRAYED);
@@ -745,27 +1018,29 @@ class TrianglesBatchingLayer {
 
         let f3 = (visible && !culled && pickable) ? RENDER_PASSES.PICK : RENDER_PASSES.NOT_RENDERED;
 
-        if (deferred) {
-            // Avoid zillions of individual WebGL bufferSubData calls - buffer them to apply in one shot
-            if (!this._deferredFlagValues) {
-                this._deferredFlagValues = new Uint8Array(this._numVerts * 4);
-            }
-            for (let i = firstFlag, len = (firstFlag + lenFlags); i < len; i += 4) {
-                this._deferredFlagValues[i + 0] = f0;
-                this._deferredFlagValues[i + 1] = f1;
-                this._deferredFlagValues[i + 2] = f2;
-                this._deferredFlagValues[i + 3] = f3;
-            }
-        } else if (this._state.flagsBuf) {
-            const tempArray = this._scratchMemory.getUInt8Array(lenFlags);
-            for (let i = 0; i < lenFlags; i += 4) {
-                tempArray[i + 0] = f0; // x - normal fill
-                tempArray[i + 1] = f1; // y - emphasis fill
-                tempArray[i + 2] = f2; // z - edges
-                tempArray[i + 3] = f3; // w - pick
-            }
-            this._state.flagsBuf.setData(tempArray, firstFlag, lenFlags);
-        }
+        const state = this._state;
+        const gl = this.model.scene.canvas.gl;
+
+        gl.bindTexture (gl.TEXTURE_2D, state.objectDataTexture2);
+
+        tempUint8Array4 [0] = f0;
+        tempUint8Array4 [1] = f1;
+        tempUint8Array4 [2] = f2;
+        tempUint8Array4 [3] = f3;
+
+        void gl.texSubImage2D(
+            gl.TEXTURE_2D,
+            0, // level
+            2, // xoffset
+            portionId,
+            1, // width
+            1, //height
+            gl.RGBA_INTEGER,
+            gl.UNSIGNED_BYTE,
+            tempUint8Array4
+        );
+
+        gl.bindTexture (gl.TEXTURE_2D, null);
     }
 
     _setDeferredFlags() {
@@ -776,33 +1051,34 @@ class TrianglesBatchingLayer {
     }
 
     _setFlags2(portionId, flags, deferred = false) {
-
         if (!this._finalized) {
             throw "Not finalized";
         }
 
-        const portionsIdx = portionId;
-        const portion = this._portions[portionsIdx];
-        const vertexBase = portion.vertsBase;
-        const numVerts = portion.numVerts;
-        const firstFlag = vertexBase * 4;
-        const lenFlags = numVerts * 4;
         const clippable = !!(flags & ENTITY_FLAGS.CLIPPABLE) ? 255 : 0;
 
-        if (deferred) {
-            if (!this._setDeferredFlag2Values) {
-                this._setDeferredFlag2Values = new Uint8Array(this._numVerts * 4);
-            }
-            for (let i = firstFlag, len = (firstFlag + lenFlags); i < len; i += 4) {
-                this._setDeferredFlag2Values[i] = clippable;
-            }
-        } else if (this._state.flags2Buf) {
-            const tempArray = this._scratchMemory.getUInt8Array(lenFlags);
-            for (let i = 0; i < lenFlags; i += 4) {
-                tempArray[i + 0] = clippable;
-            }
-            this._state.flags2Buf.setData(tempArray, firstFlag, lenFlags);
-        }
+        const state = this._state;
+        const gl = this.model.scene.canvas.gl;
+
+        gl.bindTexture (gl.TEXTURE_2D, state.objectDataTexture2);
+
+        tempUint8Array4 [0] = clippable;
+        tempUint8Array4 [1] = 0;
+        tempUint8Array4 [2] = 1;
+        tempUint8Array4 [3] = 2;
+
+        void gl.texSubImage2D(
+            gl.TEXTURE_2D,
+            0, // level
+            3, // xoffset
+            portionId, // yoffset
+            1, // width
+            1, //height
+            gl.RGBA_INTEGER,
+            gl.UNSIGNED_BYTE,
+            tempUint8Array4
+        );
+        gl.bindTexture (gl.TEXTURE_2D, null);
     }
 
     _setDeferredFlags2() {
@@ -874,15 +1150,15 @@ class TrianglesBatchingLayer {
                     this._batchingRenderers.colorQualityRenderer.drawLayer(frameCtx, this, RENDER_PASSES.COLOR_OPAQUE);
                 }
             } else {
-                if (this._state.normalsBuf) {
+                // if (this._state.normalsBuf) {
                     if (this._batchingRenderers.colorRenderer) {
                         this._batchingRenderers.colorRenderer.drawLayer(frameCtx, this, RENDER_PASSES.COLOR_OPAQUE);
                     }
-                } else {
-                    if (this._batchingRenderers.flatColorRenderer) {
-                        this._batchingRenderers.flatColorRenderer.drawLayer(frameCtx, this, RENDER_PASSES.COLOR_OPAQUE);
-                    }
-                }
+                // } else {
+                //     if (this._batchingRenderers.flatColorRenderer) {
+                //         this._batchingRenderers.flatColorRenderer.drawLayer(frameCtx, this, RENDER_PASSES.COLOR_OPAQUE);
+                //     }
+                // }
             }
         }
     }

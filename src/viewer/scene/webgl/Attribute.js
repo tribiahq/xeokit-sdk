@@ -15,8 +15,9 @@ class Attribute {
             return;
         }
         arrayBuf.bind();
+        // chipmunk: not use "I" for non-integer buffers
+        this._gl.vertexAttribIPointer(this.location, arrayBuf.itemSize, arrayBuf.itemType, arrayBuf.normalized, arrayBuf.stride, arrayBuf.offset);
         this._gl.enableVertexAttribArray(this.location);
-        this._gl.vertexAttribPointer(this.location, arrayBuf.itemSize, arrayBuf.itemType, arrayBuf.normalized, arrayBuf.stride, arrayBuf.offset);
     }
 }
 

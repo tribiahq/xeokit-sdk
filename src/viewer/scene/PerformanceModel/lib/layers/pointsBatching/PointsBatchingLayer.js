@@ -94,11 +94,11 @@ class PointsBatchingLayer {
      * @param lenPositions Number of positions we'd like to create in the portion.
      * @returns {boolean} True if OK to create another portion.
      */
-    canCreatePortion(lenPositions) {
+    canCreatePortion(positions) {
         if (this._finalized) {
             throw "Already finalized";
         }
-        return ((this._buffer.positions.length + lenPositions) < (this._buffer.maxVerts * 3));
+        return ((this._buffer.positions.length + positions.length) < (this._buffer.maxVerts * 3));
     }
 
     /**

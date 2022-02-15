@@ -6,7 +6,7 @@ import {Spinner} from './Spinner.js';
 import {WEBGL_INFO} from '../webglInfo.js';
 
 const WEBGL_CONTEXT_NAMES = [
-    "webgl",
+    "webgl2", // chipmunk
     "experimental-webgl",
     "webkit-3d",
     "moz-webgl",
@@ -441,13 +441,18 @@ class Canvas extends Component {
             } else {
                 if (WEBGL_INFO.SUPPORTED_EXTENSIONS["OES_standard_derivatives"]) {
                     const ext = this.gl.getExtension("OES_standard_derivatives");
-                    this.gl.hint(ext.FRAGMENT_SHADER_DERIVATIVE_HINT_OES, this.gl.FASTEST);
+                    // this.gl.hint(ext.FRAGMENT_SHADER_DERIVATIVE_HINT_OES, this.gl.FASTEST);
                 }
                 if (WEBGL_INFO.SUPPORTED_EXTENSIONS["EXT_frag_depth"]) {
                     this.gl.getExtension('EXT_frag_depth');
                 }
                 if (WEBGL_INFO.SUPPORTED_EXTENSIONS["WEBGL_depth_texture"]) {
                     this.gl.getExtension('WEBGL_depth_texture');
+                }
+                if (WEBGL_INFO.SUPPORTED_EXTENSIONS["OES_texture_float"]) {
+                    this.gl.getExtension('OES_texture_float');
+                } else {
+                    alert ("No support for WebGL extension OES_texture_float");
                 }
             }
         }

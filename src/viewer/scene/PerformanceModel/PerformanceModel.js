@@ -2070,12 +2070,12 @@ class PerformanceModel extends Component {
 
             if (cfg.positionsDecodeMatrix) {
                 if (!this._lastDecodeMatrix) {
-                    needNewBatchingLayers = true;
+                    // needNewBatchingLayers = true; // chipmunk
                     this._lastDecodeMatrix = math.mat4(cfg.positionsDecodeMatrix);
 
                 } else {
                     if (!math.compareMat4(this._lastDecodeMatrix, cfg.positionsDecodeMatrix)) {
-                        needNewBatchingLayers = true;
+                        // needNewBatchingLayers = true; // chipmunk
                         this._lastDecodeMatrix.set(cfg.positionsDecodeMatrix)
                     }
                 }
@@ -2128,7 +2128,7 @@ class PerformanceModel extends Component {
                 case "surface":
 
                     if (layer) {
-                        if (!layer.canCreatePortion(positions.length, indices.length)) {
+                        if (!layer.canCreatePortion(positions, indices)) {
                             layer.finalize();
                             delete this._currentBatchingLayers[primitive];
                             layer = null;
@@ -2148,6 +2148,11 @@ class PerformanceModel extends Component {
                         this._layerList.push(layer);
                         this._currentBatchingLayers[primitive] = layer;
                     }
+                    
+                    // chipmunk TODO: handle the case when it's null
+                    // chipmunk TODO: not the case when loading XKT files
+                    layer._positionsDecodeMatrix = cfg.positionsDecodeMatrix; // chipmuk
+                    // layer._positionsDecodeMatrix = [ 0.001, 0, 0, 0, 0, 0.001, 0, 0, 0, 0, 0.001, 0, 0, Math.random()*200, 0, 1, ]; // chipmuk
 
                     if (!edgeIndices) {
                         edgeIndices = buildEdgeIndices(positions, indices, null, this._edgeThreshold);
@@ -2179,7 +2184,7 @@ class PerformanceModel extends Component {
                 case "lines":
 
                     if (layer) {
-                        if (!layer.canCreatePortion(positions.length, indices.length)) {
+                        if (!layer.canCreatePortion(positions, indices)) {
                             layer.finalize();
                             delete this._currentBatchingLayers[primitive];
                             layer = null;
@@ -2218,7 +2223,7 @@ class PerformanceModel extends Component {
                 case "points":
 
                     if (layer) {
-                        if (!layer.canCreatePortion(positions.length)) {
+                        if (!layer.canCreatePortion(positions)) {
                             layer.finalize();
                             delete this._currentBatchingLayers[primitive];
                             layer = null;

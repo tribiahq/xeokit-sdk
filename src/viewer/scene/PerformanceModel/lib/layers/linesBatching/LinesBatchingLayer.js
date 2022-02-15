@@ -92,11 +92,11 @@ class LinesBatchingLayer {
      * @param lenIndices Number of indices we'd like to create in this portion.
      * @returns {boolean} True if OK to create another portion.
      */
-    canCreatePortion(lenPositions, lenIndices) {
+    canCreatePortion(positions, indices) {
         if (this._finalized) {
             throw "Already finalized";
         }
-        return ((this._buffer.positions.length + lenPositions) < (this._buffer.maxVerts * 3) && (this._buffer.indices.length + lenIndices) < (this._buffer.maxIndices));
+        return ((this._buffer.positions.length + positions.length) < (this._buffer.maxVerts * 3) && (this._buffer.indices.length + indices.length) < (this._buffer.maxIndices));
     }
 
     /**

@@ -26,6 +26,8 @@ class TrianglesBatchingPickMeshRenderer {
 
     drawLayer(frameCtx, batchingLayer, renderPass) {
 
+        return; // chipmunk 4 (avoid drawElements)
+        
         const model = batchingLayer.model;
         const scene = model.scene;
         const camera = scene.camera;

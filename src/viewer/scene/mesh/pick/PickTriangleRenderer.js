@@ -75,7 +75,7 @@ PickTriangleRenderer.prototype.drawMesh = function (frameCtx, mesh) {
     const frontface = materialState.frontface;
     const project = scene.camera.project;
     const positionsBuf = geometry._getPickTrianglePositions();
-    const pickColorsBuf = geometry._getPickTriangleColors();
+    // const pickColorsBuf = geometry._getPickTriangleColors(); // chipmunk
 
     this._program.bind();
 
@@ -142,9 +142,9 @@ PickTriangleRenderer.prototype.drawMesh = function (frameCtx, mesh) {
     } else {
         this._aPosition.bindArrayBuffer(positionsBuf);
     }
-    pickColorsBuf.bind();
-    gl.enableVertexAttribArray(this._aColor.location);
-    gl.vertexAttribPointer(this._aColor.location, pickColorsBuf.itemSize, pickColorsBuf.itemType, true, 0, 0); // Normalize
+    // pickColorsBuf.bind(); // chipmunk
+    // gl.enableVertexAttribArray(this._aColor.location); // chipmunk
+    // gl.vertexAttribPointer(this._aColor.location, pickColorsBuf.itemSize, pickColorsBuf.itemType, true, 0, 0); // Normalize // chipmunk
     gl.drawArrays(geometryState.primitive, 0, positionsBuf.numItems / 3);
 };
 
@@ -172,7 +172,7 @@ PickTriangleRenderer.prototype._allocate = function (mesh) {
         });
     }
     this._aPosition = program.getAttribute("position");
-    this._aColor = program.getAttribute("color");
+    // this._aColor = program.getAttribute("color"); // chipmunk
     this._uClippable = program.getLocation("clippable");
     this._uOffset = program.getLocation("offset");
     if (scene.logarithmicDepthBufferEnabled ) {

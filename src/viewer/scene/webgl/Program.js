@@ -109,7 +109,7 @@ class Program {
                     uName = uName.substr(0, uName.length - 1);
                 }
                 location = gl.getUniformLocation(this.handle, uName);
-                if ((u.type === gl.SAMPLER_2D) || (u.type === gl.SAMPLER_CUBE) || (u.type === 35682)) {
+                if ((u.type === gl.SAMPLER_2D) || (u.type === gl.SAMPLER_CUBE) || (u.type === 35682) || (u.type === gl.UNSIGNED_INT_SAMPLER_2D) || (u.type === gl.INT_SAMPLER_2D)) {
                     this.samplers[uName] = new Sampler(gl, location);
                 } else {
                     this.uniforms[uName] = location;

@@ -22,15 +22,16 @@ class TrianglesBatchingBuffer {
         this.maxVerts = maxGeometryBatchSize;
         this.maxIndices = maxGeometryBatchSize * 3; // Rough rule-of-thumb
         this.positions = [];
-        this.colors = [];
+        // this.colors = [];
         this.metallicRoughness = [];
         this.normals = [];
-        this.pickColors = [];
-        this.flags = [];
-        this.flags2 = [];
+        // this.pickColors = [];
+        // this.flags = [];
+        // this.flags2 = [];
         this.offsets = [];
         this.indices = [];
         this.edgeIndices = [];
+        this.objectData = [];
     }
 }
 
