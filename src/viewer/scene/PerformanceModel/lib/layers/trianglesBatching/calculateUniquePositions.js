@@ -51,7 +51,7 @@ function setMaxNumberOfPositions (maxPositions)
  * of positions, indices and edgeIndices with the applied optimization
  * are returned.
  * 
- * The algorithm, instead of being based in a hask-like LUT for
+ * The algorithm, instead of being based in a hash-like LUT for
  * identifying unique positions, is based in pre-sorting the input
  * positions...
  * 
