@@ -561,9 +561,6 @@ class TrianglesBatchingLayer {
 
             this._maxIndexNumberForObjectId = null;
 
-            console.log ({
-                indices: indices.length / 6
-            });
             state.indicesBuf = new ArrayBuf(gl, gl.ARRAY_BUFFER, indices, indices.length, 2, gl.STATIC_DRAW);
 
             state.numTriangles = Math.floor (indices.length / 2);
@@ -576,10 +573,6 @@ class TrianglesBatchingLayer {
             );
 
             this._maxIndexNumberForObjectId2 = null;
-
-            console.log ({
-                edgeIndices: edgeIndices.length / 4
-            });
 
             state.edgeIndicesBuf = new ArrayBuf(gl, gl.ARRAY_BUFFER, edgeIndices, edgeIndices.length, 2, gl.STATIC_DRAW);
         }
@@ -608,6 +601,7 @@ class TrianglesBatchingLayer {
     generateTextureForColorsAndFlags (gl, colors, pickColors) {
         // The number of rows in the texture is the number of
         // objects in the layer.
+
         const textureHeight = colors.length;
 
         // 4 columns per texture row:
