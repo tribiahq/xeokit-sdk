@@ -19,6 +19,7 @@ const MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER = (1 << 10);
 
 let _numTotalPolygons = 0;
 let _numTotalEdges = 0;
+let _numTotalEdges2 = 0;
 let _numTotalVertices = 0;
 let _numUniqueSmallVertices = 0;
 
@@ -29,6 +30,7 @@ let _lastCanCreatePortion = {
     uniquePositions: null,
     uniqueIndices: null,
     uniqueEdgeIndices: null,
+    normalsPerPolygon: null,
 };
 
 const tempMat4 = math.mat4();
@@ -166,15 +168,10 @@ class TrianglesBatchingLayer {
         if (this._finalized) {
             throw "Already finalized";
         }
-
-        if (this._numPortions >= MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER)
-        {
-            return false;
-        }
         
         _lastCanCreatePortion.positions = positions;
         _lastCanCreatePortion.indices = indices;
-        _lastCanCreatePortion.edgeIndices = indices;
+        _lastCanCreatePortion.edgeIndices = edgeIndices;
 
         [
             _lastCanCreatePortion.uniquePositions,
@@ -187,22 +184,20 @@ class TrianglesBatchingLayer {
         });
 
         _numUniqueSmallVertices = _numUniqueSmallVertices + _lastCanCreatePortion.uniquePositions.length;
+        _numTotalVertices += positions.length;
+        _numTotalPolygons += indices.length / 3;
+        _numTotalEdges += edgeIndices.length / 2;
 
-
-
-        let retVal = (this._numUniqueVerts + (_lastCanCreatePortion.uniquePositions.length / 3)) <= MAX_NUMBER_OF_UNIQUE_VERTICES_IN_BATCHING_LAYER &&
+        let retVal = this._numPortions < MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER && 
+                     (this._numUniqueVerts + (_lastCanCreatePortion.uniquePositions.length / 3)) <= MAX_NUMBER_OF_UNIQUE_VERTICES_IN_BATCHING_LAYER &&
                      ((this._numUniqueVerts + (_lastCanCreatePortion.uniquePositions.length / 3)) / 512) <= 2048 &&
                      ((this._numIndicesInLayer + (_lastCanCreatePortion.uniqueIndices.length / 3)) / 512) <= 2048;
 
         if (!retVal)
         {
-            console.log ("Cannot create portion!");
-            console.log (this._numUniqueVerts + (_lastCanCreatePortion.uniquePositions.length / 3));
+            // console.log ("Cannot create portion!");
+            // console.log (this._numUniqueVerts + (_lastCanCreatePortion.uniquePositions.length / 3));
         }
-
-        _numTotalVertices += positions.length;
-        _numTotalPolygons += indices.length / 3;
-        _numTotalEdges += edgeIndices.length / 2;
 
         return retVal;
     }
@@ -232,23 +227,20 @@ class TrianglesBatchingLayer {
             throw "Already finalized";
         }
 
-        if (cfg.positions === _lastCanCreatePortion.positions &&
-            cfg.indices === _lastCanCreatePortion.indices &&
-            cfg.edgeIndices === _lastCanCreatePortion.edgeIndices) {
-                cfg.positions = _lastCanCreatePortion.positions;
-                cfg.indices = _lastCanCreatePortion.indices;    
-                cfg.edgeIndices = _lastCanCreatePortion.edgeIndices;    
-        } else {
-            [
+        let normalsPerPolygon = null;
+
+        if (cfg.normals && cfg.indices) {
+            normalsPerPolygon = this.calculateNormalsPerPolygon (
                 cfg.positions,
-                cfg.indices,
-                cfg.edgeIndices
-            ] = uniquifyPositions.uniquifyPositions ({
-                positions: cfg.positions,
-                indices: cfg.indices,
-                edgeIndices: cfg.edgeIndices
-            });
+                cfg.normals
+            );
         }
+
+        cfg.normals = normalsPerPolygon;
+
+        cfg.positions = _lastCanCreatePortion.uniquePositions || [];
+        cfg.indices = _lastCanCreatePortion.uniqueIndices;
+        cfg.edgeIndices = _lastCanCreatePortion.uniqueEdgeIndices;    
 
         this._numUniqueVerts += cfg.positions.length / 3;
 
@@ -476,6 +468,21 @@ class TrianglesBatchingLayer {
         return portionId;
     }
 
+    calculateNormalsPerPolygon (indices, normals) {
+        let retVal = new Int8Array(indices.length/3*2);
+
+        for (let i = 0, len = indices.length / 3; i < len; i++) {
+            retVal [i*2] = Math.round((
+                normals [indices[i*3] * 3 + 0] + normals [indices[i*3+1] * 3 + 0] + normals [indices[i*3+2] * 3 + 0]
+            )/3);
+            retVal [i*2+1] = Math.round((
+                normals [indices[i*3] * 3 + 1] + normals [indices[i*3+1] * 3 + 1] + normals [indices[i*3+2] * 3 + 1]
+            )/3);
+        }
+
+        return retVal;
+    }
+
     /**
      * Builds batch VBOs from appended geometries.
      * No more portions can then be created.
@@ -491,14 +498,20 @@ class TrianglesBatchingLayer {
         const gl = this.model.scene.canvas.gl;
         const buffer = this._buffer;
 
+        _numTotalEdges2 += buffer.edgeIndices.length / 2;
+
         // start of chipmunk
-        console.log (JSON.stringify({
-            'total-vertices-so-far': _numTotalVertices,
-            'unique-small-vertices-so-far': _numUniqueSmallVertices,
-            'total-polygons': _numTotalPolygons,
-            'total-edges': _numTotalEdges,
-            'ratio': (_numUniqueSmallVertices / _numTotalVertices * 100).toFixed(2)
-        }, null, 4));
+        // console.log (JSON.stringify({
+        //     'total-vertices-so-far': _numTotalVertices,
+        //     'unique-small-vertices-so-far': _numUniqueSmallVertices,
+        //     'total-polygons': [
+        //         _numTotalPolygons, buffer.indices.length / 3
+        //     ],
+        //     'total-edges': [
+        //         _numTotalEdges, _numTotalEdges2, buffer.edgeIndices.length / 2, this._numEdgeIndicesInLayer / 2
+        //     ],
+        //     'ratio': (_numUniqueSmallVertices / _numTotalVertices * 100).toFixed(2)
+        // }, null, 4));
 
         // Generate all the needed textures in the layer
 
@@ -524,7 +537,6 @@ class TrianglesBatchingLayer {
         // c) normals texture
         const normalsTexture = this.generateTextureForNormals (
             gl,
-            buffer.indices,
             buffer.normals
         ); 
 
@@ -753,20 +765,15 @@ class TrianglesBatchingLayer {
      * 
      * @returns The created texture and its height
      */
-    generateTextureForNormals (gl, indices, normals) {
+    generateTextureForNormals (gl, normals) {
         const textureWidth = 512;
-        const textureHeight = Math.ceil (indices.length / textureWidth);
+        const textureHeight = Math.ceil (normals.length / textureWidth);
 
         const texArraySize = textureWidth * textureHeight * 2
         const texArray = new Int8Array (texArraySize);
 
         texArray.fill(0);
-
-        for (let i = 0, j = 0, indicesLen = indices.length; i < indicesLen; i+=3, j+=2)
-        {
-            texArray [j] = normals [indices[i] * 3 + 0];
-            texArray [j+1] = normals [indices[i] * 3 + 0];
-        }
+        texArray.set(normals, 0)
 
         const texture = gl.createTexture();
 
