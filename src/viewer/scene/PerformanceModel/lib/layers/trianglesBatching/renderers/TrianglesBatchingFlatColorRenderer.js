@@ -48,6 +48,72 @@ class TrianglesBatchingFlatColorRenderer {
             this._bindProgram(frameCtx);
         }
 
+        var rr = this._program.bindTexture(
+            this._uObjectDataTexture, 
+            {
+                bind: function (unit) {
+                    gl.activeTexture(gl["TEXTURE" + unit]);
+                    gl.bindTexture(gl.TEXTURE_2D, state.objectDataTexture);
+                    return true;
+                },
+                unbind: function (unit) {
+                    gl.activeTexture(gl["TEXTURE" + unit]);
+                    gl.bindTexture(gl.TEXTURE_2D, null);
+                }
+            },
+            1
+        ); // chipmunk
+
+        var rr2 = this._program.bindTexture(
+            this._uPositionsTexture, 
+            {
+                bind: function (unit) {
+                    gl.activeTexture(gl["TEXTURE" + unit]);
+                    gl.bindTexture(gl.TEXTURE_2D, state.positionsTexture);
+                    return true;
+                },
+                unbind: function (unit) {
+                    gl.activeTexture(gl["TEXTURE" + unit]);
+                    gl.bindTexture(gl.TEXTURE_2D, null);
+                }
+            },
+            2
+        ); // chipmunk
+
+        var rr3 = this._program.bindTexture(
+            this._uNormalsPerPolygonTexture, 
+            {
+                bind: function (unit) {
+                    gl.activeTexture(gl["TEXTURE" + unit]);
+                    gl.bindTexture(gl.TEXTURE_2D, state.normalsPerPolygonTexture);
+                    return true;
+                },
+                unbind: function (unit) {
+                    gl.activeTexture(gl["TEXTURE" + unit]);
+                    gl.bindTexture(gl.TEXTURE_2D, null);
+                }
+            },
+            3
+        ); // chipmunk
+
+        var rr4 = this._program.bindTexture(
+            this._uObjectDataTexture2,
+            {
+                bind: function (unit) {
+                    gl.activeTexture(gl["TEXTURE" + unit]);
+                    gl.bindTexture(gl.TEXTURE_2D, state.objectDataTexture2);
+                    return true;
+                },
+                unbind: function (unit) {
+                    gl.activeTexture(gl["TEXTURE" + unit]);
+                    gl.bindTexture(gl.TEXTURE_2D, null);
+                }
+            },
+            4
+        ); // chipmunk
+
+        gl.uniform1i(this._uObjectDataTexture2Height, state.objectDataTexture2Height);
+
         gl.uniform1i(this._uRenderPass, renderPass);
 
         gl.uniformMatrix4fv(this._uViewMatrix, false, (origin) ? createRTCViewMat(camera.viewMatrix, origin) : camera.viewMatrix);
@@ -76,29 +142,12 @@ class TrianglesBatchingFlatColorRenderer {
             }
         }
 
-        gl.uniformMatrix4fv(this._uPositionsDecodeMatrix, false, batchingLayer._state.positionsDecodeMatrix);
-
-        this._aPosition.bindArrayBuffer(state.positionsBuf);
-
-        if (this._aColor) {
-            this._aColor.bindArrayBuffer(state.colorsBuf);
+        if (this._aPackedVertexId) {
+            this._aPackedVertexId.bindArrayBuffer(state.indicesBuf);
         }
 
-        if (this._aFlags) {
-            this._aFlags.bindArrayBuffer(state.flagsBuf);
-        }
 
-        if (this._aFlags2) {
-            this._aFlags2.bindArrayBuffer(state.flags2Buf);
-        }
-
-        if (this._aOffset) {
-            this._aOffset.bindArrayBuffer(state.offsetsBuf);
-        }
-
-        state.indicesBuf.bind();
-
-        gl.drawElements(gl.TRIANGLES, state.indicesBuf.numItems, state.indicesBuf.itemType, 0);
+        gl.drawArrays(gl.TRIANGLES, 0, state.indicesBuf.numItems);
     }
 
     _allocate() {
@@ -116,10 +165,12 @@ class TrianglesBatchingFlatColorRenderer {
 
         const program = this._program;
 
+        this._uObjectDataTexture2Height = program.getLocation("objectDataTexture2Height");
         this._uRenderPass = program.getLocation("renderPass");
-        this._uPositionsDecodeMatrix = program.getLocation("positionsDecodeMatrix");
         this._uWorldMatrix = program.getLocation("worldMatrix");
+        this._uWorldNormalMatrix = program.getLocation("worldNormalMatrix");
         this._uViewMatrix = program.getLocation("viewMatrix");
+        this._uViewNormalMatrix = program.getLocation("viewNormalMatrix");
         this._uProjMatrix = program.getLocation("projMatrix");
 
         this._uLightAmbient = program.getLocation("lightAmbient");
@@ -163,12 +214,8 @@ class TrianglesBatchingFlatColorRenderer {
                 dir: program.getLocation("sectionPlaneDir" + i)
             });
         }
-
-        this._aPosition = program.getAttribute("position");
-        this._aOffset = program.getAttribute("offset");
-        this._aColor = program.getAttribute("color");
-        this._aFlags = program.getAttribute("flags");
-        this._aFlags2 = program.getAttribute("flags2");
+        
+        this._aPackedVertexId = program.getAttribute("packedVertexId");
 
         if (this._withSAO) {
             this._uOcclusionTexture = "uOcclusionTexture";
@@ -178,6 +225,11 @@ class TrianglesBatchingFlatColorRenderer {
         if (scene.logarithmicDepthBufferEnabled) {
             this._uLogDepthBufFC = program.getLocation("logDepthBufFC");
         }
+
+        this._uObjectDataTexture = "uObjectDataTexture"; // chipmunk
+        this._uObjectDataTexture2 = "uObjectDataTexture2"; // chipmunk
+        this._uPositionsTexture = "uPositionsTexture"; // chipmunk
+        this._uNormalsPerPolygonTexture = "uNormalsPerPolygonTexture"; // chipmunk
     }
 
     _bindProgram(frameCtx) {
@@ -197,7 +249,6 @@ class TrianglesBatchingFlatColorRenderer {
         }
 
         for (let i = 0, len = lights.length; i < len; i++) {
-
             const light = lights[i];
 
             if (this._uLightColor[i]) {
@@ -247,29 +298,46 @@ class TrianglesBatchingFlatColorRenderer {
         const sectionPlanesState = scene._sectionPlanesState;
         const clipping = sectionPlanesState.sectionPlanes.length > 0;
         const src = [];
-
+        src.push("#version 300 es");
         src.push("// Triangles batching flat-shading draw vertex shader");
 
         if (scene.logarithmicDepthBufferEnabled && WEBGL_INFO.SUPPORTED_EXTENSIONS["EXT_frag_depth"]) {
             src.push("#extension GL_EXT_frag_depth : enable");
         }
 
-        src.push("uniform int renderPass;");
+        src.push("#ifdef GL_FRAGMENT_PRECISION_HIGH");
+        src.push("precision highp float;");
+        src.push("precision highp int;");
+        src.push("precision highp usampler2D;");
+        src.push("precision highp isampler2D;");
+        src.push("precision highp sampler2D;");
+        src.push("#else");
+        src.push("precision mediump float;");
+        src.push("precision mediump int;");
+        src.push("precision mediump usampler2D;");
+        src.push("precision mediump isampler2D;");
+        src.push("precision mediump sampler2D;");
+        src.push("#endif");
 
-        src.push("attribute vec3 position;");
-        src.push("attribute vec4 color;");
-        src.push("attribute vec4 flags;");
-        src.push("attribute vec4 flags2;");
+        src.push("uniform int renderPass;");
+        src.push("uniform highp int objectDataTexture2Height;");
+
+        src.push("in uvec3 packedVertexId;");
+
 
         if (scene.entityOffsetsEnabled) {
-            src.push("attribute vec3 offset;");
+            src.push("in vec3 offset;");
         }
 
         src.push("uniform mat4 worldMatrix;");
 
         src.push("uniform mat4 viewMatrix;");
         src.push("uniform mat4 projMatrix;");
-        src.push("uniform mat4 positionsDecodeMatrix;");
+        // src.push("uniform sampler2D uOcclusionTexture;"); // chipmunk
+        src.push("uniform sampler2D uObjectDataTexture;"); // chipmunk
+        src.push("uniform usampler2D uObjectDataTexture2;"); // chipmunk
+        src.push("uniform usampler2D uPositionsTexture;"); // chipmunk
+        src.push("uniform isampler2D uNormalsPerPolygonTexture;"); // chipmunk
 
         if (scene.logarithmicDepthBufferEnabled) {
             src.push("uniform float logDepthBufFC;");
@@ -281,15 +349,36 @@ class TrianglesBatchingFlatColorRenderer {
             src.push("}");
             src.push("varying float isPerspective;");
         }
+        
+        // toni
 
         if (clipping) {
-            src.push("varying vec4 vWorldPosition;");
-            src.push("varying vec4 vFlags2;");
+            src.push("out vec4 vWorldPosition;");
+            src.push("out int vFlags2;");
         }
-        src.push("varying vec4 vViewPosition;");
-        src.push("varying vec4 vColor;");
+        src.push("out vec4 vViewPosition;");
+        src.push("out vec4 vColor;");
 
         src.push("void main(void) {");
+
+        // constants
+        src.push("int objectIndex = int(packedVertexId.g) & 1023;");
+        src.push("int uniqueVertexIndex = int ((packedVertexId.r << 6) + (packedVertexId.g >> 10));");
+
+        src.push("int h_unique_position_index = uniqueVertexIndex & 511;")
+        src.push("int v_unique_position_index = uniqueVertexIndex >> 9;")
+
+        src.push("mat4 positionsDecodeMatrix = mat4 (texelFetch (uObjectDataTexture, ivec2(0, objectIndex), 0), texelFetch (uObjectDataTexture, ivec2(1, objectIndex), 0), texelFetch (uObjectDataTexture, ivec2(2, objectIndex), 0), texelFetch (uObjectDataTexture, ivec2(3, objectIndex), 0));")
+
+        // get flags & flags2
+        src.push("uvec4 flags = texelFetch (uObjectDataTexture2, ivec2(2, objectIndex), 0);"); // chipmunk
+        src.push("uvec4 flags2 = texelFetch (uObjectDataTexture2, ivec2(3, objectIndex), 0);"); // chipmunk
+        
+        // get position
+        src.push("vec3 position = vec3(texelFetch(uPositionsTexture, ivec2(h_unique_position_index, v_unique_position_index), 0).rgb);")
+
+        // get color
+        src.push("uvec4 color = texelFetch (uObjectDataTexture2, ivec2(0, objectIndex), 0);"); // chipmunk
 
         // flags.x = NOT_RENDERED | COLOR_OPAQUE | COLOR_TRANSPARENT
         // renderPass = COLOR_OPAQUE
@@ -319,7 +408,7 @@ class TrianglesBatchingFlatColorRenderer {
         }
         if (clipping) {
             src.push("vWorldPosition = worldPosition;");
-            src.push("vFlags2 = flags2;");
+            src.push("vFlags2 = flags2.r;");
         }
         src.push("gl_Position = clipPos;");
         src.push("}");
@@ -334,6 +423,7 @@ class TrianglesBatchingFlatColorRenderer {
         const sectionPlanesState = scene._sectionPlanesState;
         const clipping = sectionPlanesState.sectionPlanes.length > 0;
         const src = [];
+        src.push ('#version 300 es');
         src.push("// Triangles batching flat-shading draw fragment shader");
         src.push("#extension GL_OES_standard_derivatives : enable");
         if (scene.logarithmicDepthBufferEnabled && WEBGL_INFO.SUPPORTED_EXTENSIONS["EXT_frag_depth"]) {
@@ -350,7 +440,7 @@ class TrianglesBatchingFlatColorRenderer {
         if (scene.logarithmicDepthBufferEnabled && WEBGL_INFO.SUPPORTED_EXTENSIONS["EXT_frag_depth"]) {
             src.push("varying float isPerspective;");
             src.push("uniform float logDepthBufFC;");
-            src.push("varying float vFragDepth;");
+            src.push("in float vFragDepth;");
         }
 
         if (this._withSAO) {
@@ -368,8 +458,8 @@ class TrianglesBatchingFlatColorRenderer {
         }
 
         if (clipping) {
-            src.push("varying vec4 vWorldPosition;");
-            src.push("varying vec4 vFlags2;");
+            src.push("in vec4 vWorldPosition;");
+            src.push("in int vFlags2;");
             for (let i = 0, len = sectionPlanesState.sectionPlanes.length; i < len; i++) {
                 src.push("uniform bool sectionPlaneActive" + i + ";");
                 src.push("uniform vec3 sectionPlanePos" + i + ";");
@@ -398,13 +488,15 @@ class TrianglesBatchingFlatColorRenderer {
             }
         }
 
-        src.push("varying vec4 vViewPosition;");
-        src.push("varying vec4 vColor;");
-        
+        src.push("in vec4 vViewPosition;");
+        src.push("in vec4 vColor;");
+       
+        src.push("out vec4 outColor;");
+ 
         src.push("void main(void) {");
 
         if (clipping) {
-            src.push("  bool clippable = (float(vFlags2.x) > 0.0);");
+            src.push("  bool clippable = vFlags2 > 0;");
             src.push("  if (clippable) {");
             src.push("  float dist = 0.0;");
             for (let i = 0, len = sectionPlanesState.sectionPlanes.length; i < len; i++) {
@@ -469,9 +561,9 @@ class TrianglesBatchingFlatColorRenderer {
             src.push("   float blendFactor       = uSAOParams[3];");
             src.push("   vec2 uv                 = vec2(gl_FragCoord.x / viewportWidth, gl_FragCoord.y / viewportHeight);");
             src.push("   float ambient           = smoothstep(blendCutoff, 1.0, unpackRGBToFloat(texture2D(uOcclusionTexture, uv))) * blendFactor;");
-            src.push("   gl_FragColor            = vec4(fragColor.rgb * ambient, 1.0);");
+            src.push("   outColor            = vec4(fragColor.rgb * ambient, 1.0);");
         } else {
-            src.push("   gl_FragColor            = fragColor;");
+            src.push("   outColor            = fragColor;");
         }
 
         if (scene.logarithmicDepthBufferEnabled && WEBGL_INFO.SUPPORTED_EXTENSIONS["EXT_frag_depth"]) {

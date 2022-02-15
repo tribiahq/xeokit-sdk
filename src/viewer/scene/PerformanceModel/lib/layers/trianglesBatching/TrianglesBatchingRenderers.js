@@ -1,5 +1,5 @@
 import {TrianglesBatchingColorRenderer} from "./renderers/TrianglesBatchingColorRenderer.js";
-// import {TrianglesBatchingFlatColorRenderer} from "./renderers/TrianglesBatchingFlatColorRenderer.js";
+import {TrianglesBatchingFlatColorRenderer} from "./renderers/TrianglesBatchingFlatColorRenderer.js";
 import {TrianglesBatchingSilhouetteRenderer} from "./renderers/TrianglesBatchingSilhouetteRenderer.js";
 import {TrianglesBatchingEdgesRenderer} from "./renderers/TrianglesBatchingEdgesRenderer.js";
 import {TrianglesBatchingEdgesColorRenderer} from "./renderers/TrianglesBatchingEdgesColorRenderer.js";
