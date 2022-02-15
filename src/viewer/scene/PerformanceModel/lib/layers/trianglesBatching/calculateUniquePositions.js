@@ -46,6 +46,7 @@ function uniquifyPositions(mesh)
 {
     let _positions = mesh.positions;
     let _indices = mesh.indices;
+    let _edgeIndices = mesh.indices;
 
     setMaxNumberOfPositions(_positions.length / 3);
 
@@ -105,9 +106,19 @@ function uniquifyPositions(mesh)
         ];
     }
 
+    let newEdgeIndices = new Uint32Array (_edgeIndices.length);
+
+    for (let i = 0, len = _edgeIndices.length; i < len; i++)
+    {
+        newEdgeIndices[i] = remappings [
+            _edgeIndices[i]
+        ];
+    }
+
     return [
         newPositions,
-        newIndices
+        newIndices,
+        newEdgeIndices
     ];
 }
 

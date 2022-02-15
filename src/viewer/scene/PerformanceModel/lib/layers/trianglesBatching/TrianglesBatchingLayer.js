@@ -18,14 +18,17 @@ const MAX_NUMBER_OF_UNIQUE_VERTICES_IN_BATCHING_LAYER = (1 << 22);
 const MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER = (1 << 10);
 
 let _numTotalPolygons = 0;
+let _numTotalEdges = 0;
 let _numTotalVertices = 0;
 let _numUniqueSmallVertices = 0;
 
 let _lastCanCreatePortion = {
     positions: null,
     indices: null,
+    edgeIndices: null,
     uniquePositions: null,
-    uniqueIndices: null
+    uniqueIndices: null,
+    uniqueEdgeIndices: null,
 };
 
 const tempMat4 = math.mat4();
@@ -117,6 +120,7 @@ class TrianglesBatchingLayer {
         this._numUniqueVerts = 0;
 
         this._numIndicesInLayer = 0;
+        this._numEdgeIndicesInLayer = 0;
 
         this._finalized = false;
 
@@ -132,6 +136,7 @@ class TrianglesBatchingLayer {
         this._objectDataPickColors = [];
 
         this._maxIndexNumberForObjectId = []; // chipmunk
+        this._maxIndexNumberForObjectId2 = []; // chipmunk
 
         if (cfg.origin) {
             this._state.origin = math.vec3(cfg.origin);
@@ -157,7 +162,7 @@ class TrianglesBatchingLayer {
      * @param lenIndices Number of indices we'd like to create in this portion.
      * @returns {boolean} True if OK to create another portion.
      */
-    canCreatePortion(positions, indices) {
+    canCreatePortion(positions, indices, edgeIndices) {
         if (this._finalized) {
             throw "Already finalized";
         }
@@ -167,22 +172,18 @@ class TrianglesBatchingLayer {
             return false;
         }
         
-        if (positions !== _lastCanCreatePortion.positions &&
-            indices !== _lastCanCreatePortion.indices)
-        {
-            _numTotalVertices += positions.length;
-            _numTotalPolygons += indices.length / 3;
-        }
-
         _lastCanCreatePortion.positions = positions;
         _lastCanCreatePortion.indices = indices;
+        _lastCanCreatePortion.edgeIndices = indices;
 
         [
             _lastCanCreatePortion.uniquePositions,
-            _lastCanCreatePortion.uniqueIndices
+            _lastCanCreatePortion.uniqueIndices,
+            _lastCanCreatePortion.uniqueEdgeIndices,
         ] = uniquifyPositions.uniquifyPositions ({
             positions,
-            indices
+            indices,
+            edgeIndices
         });
 
         _numUniqueSmallVertices = _numUniqueSmallVertices + _lastCanCreatePortion.uniquePositions.length;
@@ -194,6 +195,10 @@ class TrianglesBatchingLayer {
             console.log ("Cannot create portion!");
             console.log (this._numUniqueVerts + (_lastCanCreatePortion.uniquePositions.length / 3));
         }
+
+        _numTotalVertices += positions.length;
+        _numTotalPolygons += indices.length / 3;
+        _numTotalEdges += edgeIndices.length / 2;
 
         return retVal;
     }
@@ -224,16 +229,20 @@ class TrianglesBatchingLayer {
         }
 
         if (cfg.positions === _lastCanCreatePortion.positions &&
-            cfg.indices === _lastCanCreatePortion.indices) {
+            cfg.indices === _lastCanCreatePortion.indices &&
+            cfg.edgeIndices === _lastCanCreatePortion.edgeIndices) {
                 cfg.positions = _lastCanCreatePortion.positions;
                 cfg.indices = _lastCanCreatePortion.indices;    
+                cfg.edgeIndices = _lastCanCreatePortion.edgeIndices;    
         } else {
             [
                 cfg.positions,
-                cfg.indices
+                cfg.indices,
+                cfg.edgeIndices
             ] = uniquifyPositions.uniquifyPositions ({
                 positions: cfg.positions,
-                indices: cfg.indices
+                indices: cfg.indices,
+                edgeIndices: cfg.edgeIndices
             });
         }
 
@@ -418,6 +427,8 @@ class TrianglesBatchingLayer {
             for (let i = 0, len = edgeIndices.length; i < len; i++) {
                 buffer.edgeIndices.push(edgeIndices[i] + vertsIndex);
             }
+            this._numEdgeIndicesInLayer += edgeIndices.length; // chupmunk
+            this._maxIndexNumberForObjectId2.push (this._numEdgeIndicesInLayer); // chupmunk
         }
 
         // start of chipmunk
@@ -481,6 +492,7 @@ class TrianglesBatchingLayer {
             'total-vertices-so-far': _numTotalVertices,
             'unique-small-vertices-so-far': _numUniqueSmallVertices,
             'total-polygons': _numTotalPolygons,
+            'total-edges': _numTotalEdges,
             'ratio': (_numUniqueSmallVertices / _numTotalVertices * 100).toFixed(2)
         }, null, 4));
 
@@ -547,11 +559,29 @@ class TrianglesBatchingLayer {
                 this._maxIndexNumberForObjectId
             );
 
+            this._maxIndexNumberForObjectId = null;
+
+            console.log ({
+                indices: indices.length / 6
+            });
             state.indicesBuf = new ArrayBuf(gl, gl.ARRAY_BUFFER, indices, indices.length, 2, gl.STATIC_DRAW);
 
             state.numTriangles = Math.floor (indices.length / 2);
+        }
 
-            this._maxIndexNumberForObjectId = null;
+        if (buffer.edgeIndices.length > 0) {
+            const edgeIndices = this.generatePackedIndicesTypedArray (
+                buffer.edgeIndices,
+                this._maxIndexNumberForObjectId2
+            );
+
+            this._maxIndexNumberForObjectId2 = null;
+
+            console.log ({
+                edgeIndices: edgeIndices.length / 4
+            });
+
+            state.edgeIndicesBuf = new ArrayBuf(gl, gl.ARRAY_BUFFER, edgeIndices, edgeIndices.length, 2, gl.STATIC_DRAW);
         }
 
         this._buffer = null;

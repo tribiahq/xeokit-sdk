@@ -2128,7 +2128,7 @@ class PerformanceModel extends Component {
                 case "surface":
 
                     if (layer) {
-                        if (!layer.canCreatePortion(positions, indices)) {
+                        if (!layer.canCreatePortion(positions, indices, edgeIndices)) {
                             layer.finalize();
                             delete this._currentBatchingLayers[primitive];
                             layer = null;
@@ -2184,7 +2184,7 @@ class PerformanceModel extends Component {
                 case "lines":
 
                     if (layer) {
-                        if (!layer.canCreatePortion(positions, indices)) {
+                        if (!layer.canCreatePortion(positions, indices, edgeIndices)) {
                             layer.finalize();
                             delete this._currentBatchingLayers[primitive];
                             layer = null;
