@@ -56,8 +56,8 @@ function setMaxNumberOfPositions (maxPositions)
  * positions...
  * 
  * (it's possible to define a _"consistent ordering"_ for the positions
- *  as positions they're quantized and thus not suffer from float
- *  number comparison artifacts)
+ *  as positions are quantized and thus not suffer from float number
+ *  comparison artifacts)
  * 
  * ... so same positions are adjacent in the sorted array, and then
  * it's easy to scan linearly the sorted array. During the linear run,
@@ -65,7 +65,7 @@ function setMaxNumberOfPositions (maxPositions)
  * function will return != 0 between current and previous element.
  * 
  * During this linear traversal of the array, a `unique counter` is used
- * in order to calculate the mapping between orig`inal indices and unique
+ * in order to calculate the mapping between original indices and unique
  * indices.
  * 
  * @param {*} mesh The input mesh to process, with `positions`, `indices` and `edgeIndices` keys.
