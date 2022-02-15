@@ -188,7 +188,11 @@ class TrianglesBatchingLayer {
 
         _numUniqueSmallVertices = _numUniqueSmallVertices + _lastCanCreatePortion.uniquePositions.length;
 
-        let retVal = (this._numUniqueVerts + (_lastCanCreatePortion.uniquePositions.length / 3)) <= MAX_NUMBER_OF_UNIQUE_VERTICES_IN_BATCHING_LAYER;
+
+
+        let retVal = (this._numUniqueVerts + (_lastCanCreatePortion.uniquePositions.length / 3)) <= MAX_NUMBER_OF_UNIQUE_VERTICES_IN_BATCHING_LAYER &&
+                     ((this._numUniqueVerts + (_lastCanCreatePortion.uniquePositions.length / 3)) / 512) <= 2048 &&
+                     ((this._numIndicesInLayer + (_lastCanCreatePortion.uniqueIndices.length / 3)) / 512) <= 2048;
 
         if (!retVal)
         {
