@@ -90,11 +90,11 @@ class TrianglesBatchingPickMeshRenderer {
         ); // chipmunk
 
         var rr4 = this._program.bindTexture(
-            this._uObjectDataTexture2,
+            this._uTexturePerObjectColorsAndFlags,
             {
                 bind: function (unit) {
                     gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, state.objectDataTexture2);
+                    gl.bindTexture(gl.TEXTURE_2D, state.texturePerObjectColorsAndFlags);
                     return true;
                 },
                 unbind: function (unit) {
@@ -105,7 +105,7 @@ class TrianglesBatchingPickMeshRenderer {
             4
         ); // chipmunk
 
-        gl.uniform1i(this._uObjectDataTexture2Height, state.objectDataTexture2Height);
+        gl.uniform1i(this._uTexturePerObjectColorsAndFlagsHeight, state.texturePerObjectColorsAndFlagsHeight);
 
         gl.uniform1i(this._uRenderPass, renderPass);
         gl.uniformMatrix4fv(this._uWorldMatrix, false, model.worldMatrix);
@@ -168,7 +168,7 @@ class TrianglesBatchingPickMeshRenderer {
 
         const program = this._program;
 
-        this._uObjectDataTexture2Height = program.getLocation("objectDataTexture2Height");
+        this._uTexturePerObjectColorsAndFlagsHeight = program.getLocation("texturePerObjectColorsAndFlagsHeight");
         this._uRenderPass = program.getLocation("renderPass");
         this._uPickInvisible = program.getLocation("pickInvisible");
         this._uPositionsDecodeMatrix = program.getLocation("positionsDecodeMatrix");
@@ -194,7 +194,7 @@ class TrianglesBatchingPickMeshRenderer {
         }
 
         this._uObjectDataTexture = "uObjectDataTexture"; // chipmunk
-        this._uObjectDataTexture2 = "uObjectDataTexture2"; // chipmunk
+        this._uTexturePerObjectColorsAndFlags = "uTexturePerObjectColorsAndFlags"; // chipmunk
         this._uPositionsTexture = "uPositionsTexture"; // chipmunk
         this._uNormalsPerPolygonTexture = "uNormalsPerPolygonTexture"; // chipmunk
     }
@@ -241,7 +241,7 @@ class TrianglesBatchingPickMeshRenderer {
         src.push("#endif");
 
         src.push("uniform int renderPass;");
-        src.push("uniform highp int objectDataTexture2Height;");
+        src.push("uniform highp int texturePerObjectColorsAndFlagsHeight;");
 
         src.push("in uvec3 packedVertexId;");
 
@@ -256,7 +256,7 @@ class TrianglesBatchingPickMeshRenderer {
         src.push("uniform mat4 projMatrix;");
         // src.push("uniform sampler2D uOcclusionTexture;"); // chipmunk
         src.push("uniform sampler2D uObjectDataTexture;"); // chipmunk
-        src.push("uniform usampler2D uObjectDataTexture2;"); // chipmunk
+        src.push("uniform usampler2D uTexturePerObjectColorsAndFlags;"); // chipmunk
         src.push("uniform usampler2D uPositionsTexture;"); // chipmunk
         src.push("uniform isampler2D uNormalsPerPolygonTexture;"); // chipmunk
 
@@ -290,15 +290,15 @@ class TrianglesBatchingPickMeshRenderer {
         src.push("mat4 positionsDecodeMatrix = mat4 (texelFetch (uObjectDataTexture, ivec2(0, objectIndex), 0), texelFetch (uObjectDataTexture, ivec2(1, objectIndex), 0), texelFetch (uObjectDataTexture, ivec2(2, objectIndex), 0), texelFetch (uObjectDataTexture, ivec2(3, objectIndex), 0));")
 
         // get flags & flags2
-        src.push("uvec4 flags = texelFetch (uObjectDataTexture2, ivec2(2, objectIndex), 0);"); // chipmunk
-        src.push("uvec4 flags2 = texelFetch (uObjectDataTexture2, ivec2(3, objectIndex), 0);"); // chipmunk
+        src.push("uvec4 flags = texelFetch (uTexturePerObjectColorsAndFlags, ivec2(2, objectIndex), 0);"); // chipmunk
+        src.push("uvec4 flags2 = texelFetch (uTexturePerObjectColorsAndFlags, ivec2(3, objectIndex), 0);"); // chipmunk
         
 
         // get position
         src.push("vec3 position = vec3(texelFetch(uPositionsTexture, ivec2(h_unique_position_index, v_unique_position_index), 0).rgb);")
 
         // get color
-        src.push("uvec4 pickColor = texelFetch (uObjectDataTexture2, ivec2(1, objectIndex), 0);"); // chipmunk
+        src.push("uvec4 pickColor = texelFetch (uTexturePerObjectColorsAndFlags, ivec2(1, objectIndex), 0);"); // chipmunk
 
         // flags.w = NOT_RENDERED | PICK
         // renderPass = PICK

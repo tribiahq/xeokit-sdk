@@ -522,7 +522,7 @@ class TrianglesBatchingLayer {
             this._objectDataPickColors
         );
 
-        state.objectDataTexture2 = colorsAndFlagsTexture.texture;
+        state.texturePerObjectColorsAndFlags = colorsAndFlagsTexture.texture;
         state.objectDataTextureHeight2 = colorsAndFlagsTexture.textureHeight;
 
         // b) positions decode matrices texture
@@ -1184,7 +1184,7 @@ class TrianglesBatchingLayer {
         const state = this._state;
         const gl = this.model.scene.canvas.gl;
 
-        gl.bindTexture (gl.TEXTURE_2D, state.objectDataTexture2);
+        gl.bindTexture (gl.TEXTURE_2D, state.texturePerObjectColorsAndFlags);
 
         tempUint8Array4 [0] = f0;
         tempUint8Array4 [1] = f1;
@@ -1223,7 +1223,7 @@ class TrianglesBatchingLayer {
         const state = this._state;
         const gl = this.model.scene.canvas.gl;
 
-        gl.bindTexture (gl.TEXTURE_2D, state.objectDataTexture2);
+        gl.bindTexture (gl.TEXTURE_2D, state.texturePerObjectColorsAndFlags);
 
         tempUint8Array4 [0] = clippable;
         tempUint8Array4 [1] = 0;
