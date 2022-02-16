@@ -17,6 +17,8 @@ const MAX_NUMBER_OF_UNIQUE_VERTICES_IN_BATCHING_LAYER = (1 << 22);
 // 10-bits allowed for object ids
 const MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER = (1 << 10);
 
+const MAX_DATA_TEXTURE_HEIGHT = (1 << 11);
+
 let _numTotalPolygons = 0;
 let _numTotalEdges = 0;
 let _numTotalEdges2 = 0;
@@ -190,8 +192,8 @@ class TrianglesBatchingLayer {
 
         let retVal = this._numPortions < MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER && 
                      (this._numUniqueVerts + (_lastCanCreatePortion.uniquePositions.length / 3)) <= MAX_NUMBER_OF_UNIQUE_VERTICES_IN_BATCHING_LAYER &&
-                     ((this._numUniqueVerts + (_lastCanCreatePortion.uniquePositions.length / 3)) / 512) <= 2048 &&
-                     ((this._numIndicesInLayer + (_lastCanCreatePortion.uniqueIndices.length / 3)) / 512) <= 2048;
+                     ((this._numUniqueVerts + (_lastCanCreatePortion.uniquePositions.length / 3)) / 512) <= MAX_DATA_TEXTURE_HEIGHT &&
+                     ((this._numIndicesInLayer + (_lastCanCreatePortion.uniqueIndices.length / 3)) / 512) <= MAX_DATA_TEXTURE_HEIGHT;
 
         if (!retVal)
         {
