@@ -96,8 +96,8 @@ class TrianglesBatchingLayer {
             indicesBuf: null,
             edgeIndicesBuf: null,
             positionsDecodeMatrix: math.mat4(),
-            objectDataTexture: null,
-            objectDataTextureHeight: null,
+            texturePerObjectPositionsDecodeMatrix: null,
+            texturePerObjectPositionsDecodeMatrixHeight: null,
             positionsTexture: null,
             positionsTextureHeight: null,
         });
@@ -523,7 +523,7 @@ class TrianglesBatchingLayer {
         );
 
         state.texturePerObjectColorsAndFlags = colorsAndFlagsTexture.texture;
-        state.objectDataTextureHeight2 = colorsAndFlagsTexture.textureHeight;
+        state.texturePerObjectColorsAndFlagsHeight = colorsAndFlagsTexture.textureHeight;
 
         // b) positions decode matrices texture
         const decodeMatrixTexture = this.generateTextureForPositionsDecodeMatrices (
@@ -531,8 +531,8 @@ class TrianglesBatchingLayer {
             this._objectDataPositionsMatrices
         ); 
 
-        state.objectDataTexture = decodeMatrixTexture.texture;
-        state.objectDataTextureHeight = decodeMatrixTexture.textureHeight;
+        state.texturePerObjectPositionsDecodeMatrix = decodeMatrixTexture.texture;
+        state.texturePerObjectPositionsDecodeMatrixHeight = decodeMatrixTexture.textureHeight;
 
         // c) normals texture
         const normalsTexture = this.generateTextureForNormals (

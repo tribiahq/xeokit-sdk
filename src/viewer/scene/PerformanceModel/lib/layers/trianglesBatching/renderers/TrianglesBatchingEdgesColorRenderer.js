@@ -46,11 +46,11 @@ class TrianglesBatchingEdgesColorRenderer {
         }
 
         var rr = this._program.bindTexture(
-            this._uObjectDataTexture, 
+            this._uTexturePerObjectPositionsDecodeMatrix, 
             {
                 bind: function (unit) {
                     gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, state.objectDataTexture);
+                    gl.bindTexture(gl.TEXTURE_2D, state.texturePerObjectPositionsDecodeMatrix);
                     return true;
                 },
                 unbind: function (unit) {
@@ -185,7 +185,7 @@ class TrianglesBatchingEdgesColorRenderer {
             this._uLogDepthBufFC = program.getLocation("logDepthBufFC");
         }
 
-        this._uObjectDataTexture = "uObjectDataTexture"; // chipmunk
+        this._uTexturePerObjectPositionsDecodeMatrix = "uTexturePerObjectPositionsDecodeMatrix"; // chipmunk
         this._uTexturePerObjectColorsAndFlags = "uTexturePerObjectColorsAndFlags"; // chipmunk
         this._uPositionsTexture = "uPositionsTexture"; // chipmunk
         this._uNormalsPerPolygonTexture = "uNormalsPerPolygonTexture"; // chipmunk
@@ -254,7 +254,7 @@ class TrianglesBatchingEdgesColorRenderer {
         src.push("uniform mat4 worldMatrix;");
         src.push("uniform mat4 viewMatrix;");
         src.push("uniform mat4 projMatrix;");
-        src.push("uniform sampler2D uObjectDataTexture;"); // chipmunk
+        src.push("uniform sampler2D uTexturePerObjectPositionsDecodeMatrix;"); // chipmunk
         src.push("uniform usampler2D uTexturePerObjectColorsAndFlags;"); // chipmunk
         src.push("uniform usampler2D uPositionsTexture;"); // chipmunk
         src.push("uniform isampler2D uNormalsPerPolygonTexture;"); // chipmunk
@@ -289,7 +289,7 @@ class TrianglesBatchingEdgesColorRenderer {
         src.push("int h_unique_position_index = uniqueVertexIndex & 511;")
         src.push("int v_unique_position_index = uniqueVertexIndex >> 9;")
 
-        src.push("mat4 positionsDecodeMatrix = mat4 (texelFetch (uObjectDataTexture, ivec2(0, objectIndex), 0), texelFetch (uObjectDataTexture, ivec2(1, objectIndex), 0), texelFetch (uObjectDataTexture, ivec2(2, objectIndex), 0), texelFetch (uObjectDataTexture, ivec2(3, objectIndex), 0));")
+        src.push("mat4 positionsDecodeMatrix = mat4 (texelFetch (uTexturePerObjectPositionsDecodeMatrix, ivec2(0, objectIndex), 0), texelFetch (uTexturePerObjectPositionsDecodeMatrix, ivec2(1, objectIndex), 0), texelFetch (uTexturePerObjectPositionsDecodeMatrix, ivec2(2, objectIndex), 0), texelFetch (uTexturePerObjectPositionsDecodeMatrix, ivec2(3, objectIndex), 0));")
 
         // get flags & flags2
         src.push("uvec4 flags = texelFetch (uTexturePerObjectColorsAndFlags, ivec2(2, objectIndex), 0);"); // chipmunk
