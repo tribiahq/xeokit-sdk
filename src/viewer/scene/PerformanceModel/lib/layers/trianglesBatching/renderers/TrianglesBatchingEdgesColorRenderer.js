@@ -25,14 +25,13 @@ class TrianglesBatchingEdgesColorRenderer {
     }
 
     drawLayer(frameCtx, batchingLayer, renderPass) {
-
         const model = batchingLayer.model;
         const scene = model.scene;
         const camera = scene.camera;
         const gl = scene.canvas.gl;
         const state = batchingLayer._state;
         const origin = batchingLayer._state.origin;
-
+        
         if (!this._program) {
             this._allocate(batchingLayer);
             if (this.errors) {
@@ -107,6 +106,22 @@ class TrianglesBatchingEdgesColorRenderer {
                 }
             },
             4
+        ); // chipmunk
+
+        var rr5 = this._program.bindTexture(
+            this._uTexturePerEdgeIdPortionIds,
+            {
+                bind: function (unit) {
+                    gl.activeTexture(gl["TEXTURE" + unit]);
+                    gl.bindTexture(gl.TEXTURE_2D, state.texturePerEdgeIdPortionIds);
+                    return true;
+                },
+                unbind: function (unit) {
+                    gl.activeTexture(gl["TEXTURE" + unit]);
+                    gl.bindTexture(gl.TEXTURE_2D, null);
+                }
+            },
+            5
         ); // chipmunk
 
         gl.uniform1i(this._uTexturePerObjectIdColorsAndFlagsHeight, state.texturePerObjectIdColorsAndFlagsHeight);
@@ -189,6 +204,7 @@ class TrianglesBatchingEdgesColorRenderer {
         this._uTexturePerObjectIdColorsAndFlags = "uTexturePerObjectIdColorsAndFlags"; // chipmunk
         this._uTexturePerVertexIdCoordinates = "uTexturePerVertexIdCoordinates"; // chipmunk
         this._uTexturePerPolygonIdNormals = "uTexturePerPolygonIdNormals"; // chipmunk
+        this._uTexturePerEdgeIdPortionIds = "uTexturePerEdgeIdPortionIds"; // chipmunk
     }
 
     _bindProgram() {
@@ -258,6 +274,7 @@ class TrianglesBatchingEdgesColorRenderer {
         src.push("uniform usampler2D uTexturePerObjectIdColorsAndFlags;"); // chipmunk
         src.push("uniform usampler2D uTexturePerVertexIdCoordinates;"); // chipmunk
         src.push("uniform isampler2D uTexturePerPolygonIdNormals;"); // chipmunk
+        src.push("uniform usampler2D uTexturePerEdgeIdPortionIds;"); // chipmunk
 
         if (scene.logarithmicDepthBufferEnabled) {
             src.push("uniform float logDepthBufFC;");
@@ -279,15 +296,32 @@ class TrianglesBatchingEdgesColorRenderer {
         src.push("void main(void) {");
 
         // constants
-        src.push("int objectIndex = int(packedVertexId.g) & 1023;");
-        src.push("int polygonIndex = gl_VertexID / 3;")
-        src.push("int uniqueVertexIndex = int ((packedVertexId.r << 6) + (packedVertexId.g >> 10));");
+        // src.push("int objectIndex = int(packedVertexId.g) & 1023;");
+        src.push("int edgeIndex = gl_VertexID / 2;")
 
-        src.push("int h_normal_index = polygonIndex & 511;")
-        src.push("int v_normal_index = polygonIndex >> 9;")
+        src.push("int h_normal_index = edgeIndex & 511;")
+        src.push("int v_normal_index = edgeIndex >> 9;")
 
-        src.push("int h_unique_position_index = uniqueVertexIndex & 511;")
-        src.push("int v_unique_position_index = uniqueVertexIndex >> 9;")
+        // get packed object-id
+        src.push("int h_packed_object_id_index = (edgeIndex / 2) & 511;")
+        src.push("int v_packed_object_id_index = (edgeIndex / 2) >> 9;")
+
+        src.push("ivec3 packedObjectId = ivec3(texelFetch(uTexturePerEdgeIdPortionIds, ivec2(h_packed_object_id_index, v_packed_object_id_index), 0).rgb);");
+
+        src.push("int objectIndex;")
+        src.push("if ((edgeIndex % 2) == 0) {")
+        src.push("  objectIndex = (packedObjectId.r << 4) + (packedObjectId.g >> 4);")
+        src.push("} else {") 
+        src.push("  objectIndex = ((packedObjectId.g & 15) << 8) + packedObjectId.b;")
+        src.push("}")
+
+        // get vertex base
+        src.push("ivec4 packedVertexBase = ivec4(texelFetch (uTexturePerObjectIdColorsAndFlags, ivec2(4, objectIndex), 0));"); // chipmunk
+
+        src.push("int uniqueVertexIndex = int(packedVertexId.r) + (packedVertexBase.r << 24) + (packedVertexBase.g << 16) + (packedVertexBase.b << 8) + packedVertexBase.a;")
+        
+        src.push("int h_unique_position_index = (uniqueVertexIndex) & 511;")
+        src.push("int v_unique_position_index = (uniqueVertexIndex) >> 9;")
 
         src.push("mat4 positionsDecodeMatrix = mat4 (texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(0, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(1, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(2, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(3, objectIndex), 0));")
 

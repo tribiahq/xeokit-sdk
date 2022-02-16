@@ -105,6 +105,22 @@ class TrianglesBatchingPickMeshRenderer {
             4
         ); // chipmunk
 
+        var rr5 = this._program.bindTexture(
+            this._uTexturePerPolygonIdPortionIds, 
+            {
+                bind: function (unit) {
+                    gl.activeTexture(gl["TEXTURE" + unit]);
+                    gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdPortionIds);
+                    return true;
+                },
+                unbind: function (unit) {
+                    gl.activeTexture(gl["TEXTURE" + unit]);
+                    gl.bindTexture(gl.TEXTURE_2D, null);
+                }
+            },
+            5
+        ); // chipmunk
+
         gl.uniform1i(this._uTexturePerObjectIdColorsAndFlagsHeight, state.texturePerObjectIdColorsAndFlagsHeight);
 
         gl.uniform1i(this._uRenderPass, renderPass);
@@ -144,7 +160,7 @@ class TrianglesBatchingPickMeshRenderer {
                 }
             }
         }
-        
+
         if (this._aPackedVertexId) {
             this._aPackedVertexId.bindArrayBuffer(state.indicesBuf);
         }
@@ -197,6 +213,7 @@ class TrianglesBatchingPickMeshRenderer {
         this._uTexturePerObjectIdColorsAndFlags = "uTexturePerObjectIdColorsAndFlags"; // chipmunk
         this._uTexturePerVertexIdCoordinates = "uTexturePerVertexIdCoordinates"; // chipmunk
         this._uTexturePerPolygonIdNormals = "uTexturePerPolygonIdNormals"; // chipmunk
+        this._uTexturePerPolygonIdPortionIds = "uTexturePerPolygonIdPortionIds"; // chipmunk
     }
 
     _bindProgram(frameCtx) {
@@ -259,6 +276,7 @@ class TrianglesBatchingPickMeshRenderer {
         src.push("uniform usampler2D uTexturePerObjectIdColorsAndFlags;"); // chipmunk
         src.push("uniform usampler2D uTexturePerVertexIdCoordinates;"); // chipmunk
         src.push("uniform isampler2D uTexturePerPolygonIdNormals;"); // chipmunk
+        src.push("uniform usampler2D uTexturePerPolygonIdPortionIds;"); // chipmunk
 
         if (scene.logarithmicDepthBufferEnabled) {
             src.push("uniform float logDepthBufFC;");
@@ -281,11 +299,32 @@ class TrianglesBatchingPickMeshRenderer {
         src.push("void main(void) {");
 
         // constants
-        src.push("int objectIndex = int(packedVertexId.g) & 1023;");
-        src.push("int uniqueVertexIndex = int ((packedVertexId.r << 6) + (packedVertexId.g >> 10));");
+        // src.push("int objectIndex = int(packedVertexId.g) & 1023;");
+        src.push("int polygonIndex = gl_VertexID / 3;")
 
-        src.push("int h_unique_position_index = uniqueVertexIndex & 511;")
-        src.push("int v_unique_position_index = uniqueVertexIndex >> 9;")
+        src.push("int h_normal_index = polygonIndex & 511;")
+        src.push("int v_normal_index = polygonIndex >> 9;")
+
+        // get packed object-id
+        src.push("int h_packed_object_id_index = (polygonIndex / 2) & 511;")
+        src.push("int v_packed_object_id_index = (polygonIndex / 2) >> 9;")
+
+        src.push("ivec3 packedObjectId = ivec3(texelFetch(uTexturePerPolygonIdPortionIds, ivec2(h_packed_object_id_index, v_packed_object_id_index), 0).rgb);");
+
+        src.push("int objectIndex;")
+        src.push("if ((polygonIndex % 2) == 0) {")
+        src.push("  objectIndex = (packedObjectId.r << 4) + (packedObjectId.g >> 4);")
+        src.push("} else {") 
+        src.push("  objectIndex = ((packedObjectId.g & 15) << 8) + packedObjectId.b;")
+        src.push("}")
+
+        // get vertex base
+        src.push("ivec4 packedVertexBase = ivec4(texelFetch (uTexturePerObjectIdColorsAndFlags, ivec2(4, objectIndex), 0));"); // chipmunk
+
+        src.push("int uniqueVertexIndex = int(packedVertexId.r) + (packedVertexBase.r << 24) + (packedVertexBase.g << 16) + (packedVertexBase.b << 8) + packedVertexBase.a;")
+        
+        src.push("int h_unique_position_index = (uniqueVertexIndex) & 511;")
+        src.push("int v_unique_position_index = (uniqueVertexIndex) >> 9;")
 
         src.push("mat4 positionsDecodeMatrix = mat4 (texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(0, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(1, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(2, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(3, objectIndex), 0));")
 

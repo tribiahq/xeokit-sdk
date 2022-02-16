@@ -12,18 +12,20 @@ import {quantizePositions, transformAndOctEncodeNormals} from "../../compression
 import { Float16Array, isFloat16Array, getFloat16, setFloat16, hfround, } from "./float16.js";
 import * as uniquifyPositions from "./calculateUniquePositions.js";
 
-// 22-bits allowed for indices
-const MAX_NUMBER_OF_UNIQUE_VERTICES_IN_BATCHING_LAYER = (1 << 22);
-// 10-bits allowed for object ids
-const MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER = (1 << 10);
+// 12-bits allowed for object ids
+const MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER = (1 << 12);
 
+// 2048 is max data texture height
 const MAX_DATA_TEXTURE_HEIGHT = (1 << 11);
+
+let _maxEdgePortions = 2;
 
 let ramStats = {
     sizeDataColorsAndFlags: 0,
     sizeDataPositionDecodeMatrices: 0,
     sizeDataTexturePositions: 0,
     sizeDataTextureNormals: 0,
+    sizeDataTexturePortionIds: 0,
     sizeIndices: 0,
     sizeEdges: 0,
     numberOfPortions: 0,
@@ -31,7 +33,6 @@ let ramStats = {
     cannotCreatePortion: {
         because10BitsObjectId: 0,
         becauseTextureSize: 0,
-        because22BitsVertexIndex: 0,
     }
 };
 
@@ -157,8 +158,10 @@ class TrianglesBatchingLayer {
         this._objectDataColors = [];
         this._objectDataPickColors = [];
 
-        this._maxIndexNumberForObjectId = []; // chipmunk
-        this._maxIndexNumberForObjectId2 = []; // chipmunk
+        this._vertexBasesForObject = []; // chipmunk
+
+        this._portionIdForIndices = []; // chipmunk
+        this._portionIdForEdges = []; // chipmunk
 
         if (cfg.origin) {
             this._state.origin = math.vec3(cfg.origin);
@@ -213,11 +216,6 @@ class TrianglesBatchingLayer {
             ramStats.cannotCreatePortion.because10BitsObjectId++;
         }
 
-        if (!((this._numUniqueVerts + (_lastCanCreatePortion.uniquePositions.length / 3)) <= MAX_NUMBER_OF_UNIQUE_VERTICES_IN_BATCHING_LAYER))
-        {
-            ramStats.cannotCreatePortion.because22BitsVertexIndex++;
-        }
-
         if (!(((this._numUniqueVerts + (_lastCanCreatePortion.uniquePositions.length / 3)) / 512) <= MAX_DATA_TEXTURE_HEIGHT &&
             ((this._numIndicesInLayer + (_lastCanCreatePortion.uniqueIndices.length / 3)) / 512) <= MAX_DATA_TEXTURE_HEIGHT))
         {
@@ -225,7 +223,6 @@ class TrianglesBatchingLayer {
         }
 
         let retVal = this._numPortions < MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER && 
-                     (this._numUniqueVerts + (_lastCanCreatePortion.uniquePositions.length / 3)) <= MAX_NUMBER_OF_UNIQUE_VERTICES_IN_BATCHING_LAYER &&
                      ((this._numUniqueVerts + (_lastCanCreatePortion.uniquePositions.length / 3)) / 512) <= MAX_DATA_TEXTURE_HEIGHT &&
                      ((this._numIndicesInLayer + (_lastCanCreatePortion.uniqueIndices.length / 3)) / 512) <= MAX_DATA_TEXTURE_HEIGHT;
 
@@ -269,7 +266,7 @@ class TrianglesBatchingLayer {
 
         if (cfg.normals && cfg.indices) {
             normalsPerPolygon = this.calculateNormalsPerPolygon (
-                cfg.positions,
+                cfg.indices,
                 cfg.normals
             );
         }
@@ -449,20 +446,25 @@ class TrianglesBatchingLayer {
             // end of chipmunk
         }
 
+        this._vertexBasesForObject.push (vertsIndex); // chupmunk
+
         if (indices) {
-            for (let i = 0, len = indices.length; i < len; i++) {
-                buffer.indices.push(indices[i] + vertsIndex);
+            for (let i = 0, len = indices.length; i < len; i+=3) {
+                buffer.indices.push(indices[i]);
+                buffer.indices.push(indices[i+1]);
+                buffer.indices.push(indices[i+2]);
+                this._portionIdForIndices.push (this._numPortions);
             }
             this._numIndicesInLayer += indices.length; // chupmunk
-            this._maxIndexNumberForObjectId.push (this._numIndicesInLayer); // chupmunk
         }
 
         if (edgeIndices) {
-            for (let i = 0, len = edgeIndices.length; i < len; i++) {
-                buffer.edgeIndices.push(edgeIndices[i] + vertsIndex);
+            for (let i = 0, len = edgeIndices.length; i < len; i+=2) {
+                buffer.edgeIndices.push(edgeIndices[i]);
+                buffer.edgeIndices.push(edgeIndices[i+1]);
+                this._portionIdForEdges.push (this._numPortions);
             }
             this._numEdgeIndicesInLayer += edgeIndices.length; // chupmunk
-            this._maxIndexNumberForObjectId2.push (this._numEdgeIndicesInLayer); // chupmunk
         }
 
         // start of chipmunk
@@ -557,7 +559,8 @@ class TrianglesBatchingLayer {
         const colorsAndFlagsTexture = this.generateTextureForColorsAndFlags (
             gl,
             this._objectDataColors,
-            this._objectDataPickColors
+            this._objectDataPickColors,
+            this._vertexBasesForObject
         );
 
         state.texturePerObjectIdColorsAndFlags = colorsAndFlagsTexture.texture;
@@ -590,6 +593,24 @@ class TrianglesBatchingLayer {
         state.texturePerVertexIdCoordinates = texturePerVertexIdCoordinates.texture;
         state.texturePerVertexIdCoordinatesHeight = texturePerVertexIdCoordinates.textureHeight;
 
+        // d) portion Id texture for triangles
+        const texturePerPolygonIdPortionIds = this.generateTextureForPackedPortionIds (
+            gl,
+            this._portionIdForIndices
+        );
+
+        state.texturePerPolygonIdPortionIds = texturePerPolygonIdPortionIds.texture;
+        state.texturePerPolygonIdPortionIdsHeight = texturePerPolygonIdPortionIds.textureHeight;
+
+        // e) portion Id texture for edges
+        const texturePerEdgeIdPortionIds = this.generateTextureForPackedPortionIds (
+            gl,
+            this._portionIdForEdges,
+        );
+
+        state.texturePerEdgeIdPortionIds = texturePerEdgeIdPortionIds.texture;
+        state.texturePerEdgeIdPortionIdsHeight = texturePerEdgeIdPortionIds.textureHeight;
+
         // end of chipmunk
 
         // if (buffer.metallicRoughness.length > 0) {
@@ -608,31 +629,21 @@ class TrianglesBatchingLayer {
         const bigIndicesSupported = WEBGL_INFO.SUPPORTED_EXTENSIONS["OES_element_index_uint"];
 
         if (buffer.indices.length > 0) {
-            const indices = this.generatePackedIndicesTypedArray (
-                buffer.indices,
-                this._maxIndexNumberForObjectId
-            );
+            const indices = new Uint16Array(buffer.indices);
 
             ramStats.sizeIndices += indices.byteLength;
 
-            this._maxIndexNumberForObjectId = null;
+            state.indicesBuf = new ArrayBuf(gl, gl.ARRAY_BUFFER, indices, indices.length, 1, gl.STATIC_DRAW);
 
-            state.indicesBuf = new ArrayBuf(gl, gl.ARRAY_BUFFER, indices, indices.length, 2, gl.STATIC_DRAW);
-
-            state.numTriangles = Math.floor (indices.length / 2);
+            state.numTriangles = Math.floor (indices.length / 3);
         }
 
         if (buffer.edgeIndices.length > 0) {
-            const edgeIndices = this.generatePackedIndicesTypedArray (
-                buffer.edgeIndices,
-                this._maxIndexNumberForObjectId2
-            );
+            const edgeIndices = new Uint16Array(buffer.edgeIndices);
 
             ramStats.sizeEdges += edgeIndices.byteLength;
 
-            this._maxIndexNumberForObjectId2 = null;
-
-            state.edgeIndicesBuf = new ArrayBuf(gl, gl.ARRAY_BUFFER, edgeIndices, edgeIndices.length, 2, gl.STATIC_DRAW);
+            state.edgeIndicesBuf = new ArrayBuf(gl, gl.ARRAY_BUFFER, edgeIndices, edgeIndices.length, 1, gl.STATIC_DRAW);
         }
 
         console.log (JSON.stringify(ramStats, null, 4));
@@ -679,7 +690,7 @@ class TrianglesBatchingLayer {
      * 
      * @returns The created texture and its height
      */
-    generateTextureForColorsAndFlags (gl, colors, pickColors) {
+    generateTextureForColorsAndFlags (gl, colors, pickColors, vertexBases) {
         // The number of rows in the texture is the number of
         // objects in the layer.
 
@@ -690,7 +701,7 @@ class TrianglesBatchingLayer {
         // - col1: (packed Uint32 as RGBA) object pick color
         // - col2: (packed 4 bytes as RGBA) object flags
         // - col3: (packed 4 bytes as RGBA) object flags2
-        const textureWidth = 4;
+        const textureWidth = 5;
 
         const texArray = new Uint8Array (4 * textureWidth * textureHeight);
 
@@ -701,13 +712,13 @@ class TrianglesBatchingLayer {
             // object color
             texArray.set (
                 colors [i],
-                i * 16 + 0
+                i * 20 + 0
             );
 
             // object pick color
             texArray.set (
                 pickColors [i],
-                i * 16 + 4
+                i * 20 + 4
             );
 
             // object flags
@@ -715,7 +726,7 @@ class TrianglesBatchingLayer {
                 [
                     0, 0, 0, 0
                 ],
-                i * 16 + 8
+                i * 20 + 8
             );
 
             // object flags2
@@ -723,7 +734,18 @@ class TrianglesBatchingLayer {
                 [
                     0, 0, 0, 0
                 ],
-                i * 16 + 12
+                i * 20 + 12
+            );
+
+            // vertex base
+            texArray.set (
+                [
+                    (vertexBases[i] >> 24) & 255,
+                    (vertexBases[i] >> 16) & 255,
+                    (vertexBases[i] >> 8) & 255,
+                    (vertexBases[i]) & 255,
+                ],
+                i * 20 + 16
             );
         }
 
@@ -930,55 +952,65 @@ class TrianglesBatchingLayer {
         };
     }
 
-        /**
-     * This will convert the indices array into a packed indices array.
-     * 
-     * TODO: provide explanation here.
-     * 
-     * @param {*} indices The array of indices in the layer.
-     * 
-     * @returns The packed indices array
+    /**
      */
-    generatePackedIndicesTypedArray (indices, maxIndexForObjectIds) {
-        const lenIndices = indices.length;
+     generateTextureForPackedPortionIds (gl, portionIdsArray) {
+        const lenArray = portionIdsArray.length;
+        const textureWidth = 512;
+        const textureHeight = Math.ceil (
+            Math.ceil (lenArray / 2) / // every 2 items will use 3 bytes: 12-bits per item
+            textureWidth
+        );
 
-        let retVal = new Uint16Array(lenIndices*2);
+        const texArraySize = textureWidth * textureHeight * 3;
+        const texArray = new Uint8Array (texArraySize);
 
-        let objectId = 0;
-        let maxIndexForObjectId = maxIndexForObjectIds[objectId];
+        ramStats.sizeDataTexturePortionIds += texArray.byteLength;
 
-        for (let i = 0; i < lenIndices; i++)
+        let j = 0;
+
+        for (let i = 0; i < lenArray; i+=2)
         {
-            // This loop will iterate (3 * number-triangles) in the layer
+            // upper 12 bits contain object Ids for even polygons/edges
+            let upper8Bits = portionIdsArray[i] >> 4;
+            let half8BitsUpper = portionIdsArray[i] & 15;
 
-            // Each iteration is a vertex index
+            // lower 12 bits contain object Ids for odd polygons/edges
+            let half8BitsLower = portionIdsArray[i+1] >> 8;
+            let lower8Bits = portionIdsArray[i+1] & 255;
 
-            // Uint22
-            let uniqueVertexIndex = indices [i];
-
-            // Unit10
-            // let objectId = this._objectIdForIndices[i];
-            if (i >= maxIndexForObjectId)
-            {
-                objectId++;
-                maxIndexForObjectId = maxIndexForObjectIds[objectId];
-            }
-
-            // Upper 16 bits contain upper 16 bits of uniqueVertexIndex-22-bits
-            var upper16Bits = uniqueVertexIndex >> (22 - 16);
-
-            // Lower 16 bits contain:
-            // - lower 10 bits: objectId
-            // - upper 6 bits: lower 6 bits of uniqueVertexIndex-22-bits
-            var lower16Bits =
-                ((uniqueVertexIndex & 63) << 10) +
-                (objectId & 1023);
-
-            retVal[i*2] = upper16Bits;
-            retVal[i*2+1] = lower16Bits;
+            texArray [j++] = upper8Bits;
+            texArray [j++] = (half8BitsUpper << 4) + half8BitsLower;
+            texArray [j++] = lower8Bits;
         }
 
-        return retVal;
+        const texture = gl.createTexture();
+
+        gl.bindTexture (gl.TEXTURE_2D, texture);
+
+        gl.texImage2D (
+            gl.TEXTURE_2D,
+            0,
+            gl.RGB8UI,
+            textureWidth,
+            textureHeight,
+            0,
+            gl.RGB_INTEGER,
+            gl.UNSIGNED_BYTE,
+            texArray
+        );
+
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+
+        gl.bindTexture(gl.TEXTURE_2D, null);
+
+        return {
+            texture,
+            textureHeight
+        };
     }
         
     isEmpty() {
