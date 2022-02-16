@@ -65,11 +65,11 @@ class TrianglesBatchingColorRenderer {
         ); // chipmunk
 
         var rr2 = this._program.bindTexture(
-            this._uPositionsTexture, 
+            this._uTexturePerVertexIdCoordinates, 
             {
                 bind: function (unit) {
                     gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, state.positionsTexture);
+                    gl.bindTexture(gl.TEXTURE_2D, state.texturePerVertexIdCoordinates);
                     return true;
                 },
                 unbind: function (unit) {
@@ -234,7 +234,7 @@ class TrianglesBatchingColorRenderer {
 
         this._uTexturePerObjectPositionsDecodeMatrix = "uTexturePerObjectPositionsDecodeMatrix"; // chipmunk
         this._uTexturePerObjectColorsAndFlags = "uTexturePerObjectColorsAndFlags"; // chipmunk
-        this._uPositionsTexture = "uPositionsTexture"; // chipmunk
+        this._uTexturePerVertexIdCoordinates = "uTexturePerVertexIdCoordinates"; // chipmunk
         this._uNormalsPerPolygonTexture = "uNormalsPerPolygonTexture"; // chipmunk
     }
 
@@ -346,7 +346,7 @@ class TrianglesBatchingColorRenderer {
         // src.push("uniform sampler2D uOcclusionTexture;"); // chipmunk
         src.push("uniform sampler2D uTexturePerObjectPositionsDecodeMatrix;"); // chipmunk
         src.push("uniform usampler2D uTexturePerObjectColorsAndFlags;"); // chipmunk
-        src.push("uniform usampler2D uPositionsTexture;"); // chipmunk
+        src.push("uniform usampler2D uTexturePerVertexIdCoordinates;"); // chipmunk
         src.push("uniform isampler2D uNormalsPerPolygonTexture;"); // chipmunk
 
         if (scene.logarithmicDepthBufferEnabled) {
@@ -417,7 +417,7 @@ class TrianglesBatchingColorRenderer {
         src.push("vec3 normal = vec3(texelFetch(uNormalsPerPolygonTexture, ivec2(h_normal_index, v_normal_index), 0).rg, 0) / 128.0;");
 
         // get position
-        src.push("vec3 position = vec3(texelFetch(uPositionsTexture, ivec2(h_unique_position_index, v_unique_position_index), 0).rgb);")
+        src.push("vec3 position = vec3(texelFetch(uTexturePerVertexIdCoordinates, ivec2(h_unique_position_index, v_unique_position_index), 0).rgb);")
 
         // get color
         src.push("uvec4 color = texelFetch (uTexturePerObjectColorsAndFlags, ivec2(0, objectIndex), 0);"); // chipmunk

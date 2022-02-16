@@ -98,8 +98,8 @@ class TrianglesBatchingLayer {
             positionsDecodeMatrix: math.mat4(),
             texturePerObjectPositionsDecodeMatrix: null,
             texturePerObjectPositionsDecodeMatrixHeight: null,
-            positionsTexture: null,
-            positionsTextureHeight: null,
+            texturePerVertexIdCoordinates: null,
+            texturePerVertexIdCoordinatesHeight: null,
         });
 
         // These counts are used to avoid unnecessary render passes
@@ -544,13 +544,13 @@ class TrianglesBatchingLayer {
         state.normalsPerPolygonTextureHeight = normalsTexture.textureHeight;
 
         // d) position coordinates texture
-        const positionsTexture = this.generateTextureForPositions (
+        const texturePerVertexIdCoordinates = this.generateTextureForPositions (
             gl,
             buffer.positions
         );
 
-        state.positionsTexture = positionsTexture.texture;
-        state.positionsTextureHeight = positionsTexture.textureHeight;
+        state.texturePerVertexIdCoordinates = texturePerVertexIdCoordinates.texture;
+        state.texturePerVertexIdCoordinatesHeight = texturePerVertexIdCoordinates.textureHeight;
 
         // end of chipmunk
 
