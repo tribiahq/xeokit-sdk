@@ -19,6 +19,22 @@ const MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER = (1 << 10);
 
 const MAX_DATA_TEXTURE_HEIGHT = (1 << 11);
 
+let ramStats = {
+    sizeDataColorsAndFlags: 0,
+    sizeDataPositionDecodeMatrices: 0,
+    sizeDataTexturePositions: 0,
+    sizeDataTextureNormals: 0,
+    sizeIndices: 0,
+    sizeEdges: 0,
+    numberOfPortions: 0,
+    numberOfLayers: 0,
+    cannotCreatePortion: {
+        because10BitsObjectId: 0,
+        becauseTextureSize: 0,
+        because22BitsVertexIndex: 0,
+    }
+};
+
 let _numTotalPolygons = 0;
 let _numTotalEdges = 0;
 let _numTotalEdges2 = 0;
@@ -69,6 +85,8 @@ class TrianglesBatchingLayer {
      * @param cfg.solid
      */
     constructor(model, cfg) {
+
+        ramStats.numberOfLayers++;
 
         /**
          * State sorting key.
@@ -190,6 +208,22 @@ class TrianglesBatchingLayer {
         _numTotalPolygons += indices.length / 3;
         _numTotalEdges += edgeIndices.length / 2;
 
+        if (!(this._numPortions < MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER))
+        {
+            ramStats.cannotCreatePortion.because10BitsObjectId++;
+        }
+
+        if (!((this._numUniqueVerts + (_lastCanCreatePortion.uniquePositions.length / 3)) <= MAX_NUMBER_OF_UNIQUE_VERTICES_IN_BATCHING_LAYER))
+        {
+            ramStats.cannotCreatePortion.because22BitsVertexIndex++;
+        }
+
+        if (!(((this._numUniqueVerts + (_lastCanCreatePortion.uniquePositions.length / 3)) / 512) <= MAX_DATA_TEXTURE_HEIGHT &&
+            ((this._numIndicesInLayer + (_lastCanCreatePortion.uniqueIndices.length / 3)) / 512) <= MAX_DATA_TEXTURE_HEIGHT))
+        {
+            ramStats.cannotCreatePortion.becauseTextureSize++;
+        }
+
         let retVal = this._numPortions < MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER && 
                      (this._numUniqueVerts + (_lastCanCreatePortion.uniquePositions.length / 3)) <= MAX_NUMBER_OF_UNIQUE_VERTICES_IN_BATCHING_LAYER &&
                      ((this._numUniqueVerts + (_lastCanCreatePortion.uniquePositions.length / 3)) / 512) <= MAX_DATA_TEXTURE_HEIGHT &&
@@ -228,6 +262,8 @@ class TrianglesBatchingLayer {
         if (this._finalized) {
             throw "Already finalized";
         }
+
+        ramStats.numberOfPortions++;
 
         let normalsPerPolygon = null;
 
@@ -577,6 +613,8 @@ class TrianglesBatchingLayer {
                 this._maxIndexNumberForObjectId
             );
 
+            ramStats.sizeIndices += indices.byteLength;
+
             this._maxIndexNumberForObjectId = null;
 
             state.indicesBuf = new ArrayBuf(gl, gl.ARRAY_BUFFER, indices, indices.length, 2, gl.STATIC_DRAW);
@@ -590,10 +628,35 @@ class TrianglesBatchingLayer {
                 this._maxIndexNumberForObjectId2
             );
 
+            ramStats.sizeEdges += edgeIndices.byteLength;
+
             this._maxIndexNumberForObjectId2 = null;
 
             state.edgeIndicesBuf = new ArrayBuf(gl, gl.ARRAY_BUFFER, edgeIndices, edgeIndices.length, 2, gl.STATIC_DRAW);
         }
+
+        console.log (JSON.stringify(ramStats, null, 4));
+
+        let totalRamSize = 0;
+
+        Object.keys(ramStats).forEach (key => {
+            if (key.startsWith ("size")) {
+                totalRamSize+=ramStats[key];
+            }
+        });
+
+        console.log (`Total size ${totalRamSize} bytes (${(totalRamSize/1000/1000).toFixed(2)} MB)`);
+
+        let percentualRamStats = {};
+
+        Object.keys(ramStats).forEach (key => {
+            if (key.startsWith ("size")) {
+                percentualRamStats[key] = 
+                    `${(ramStats[key] / totalRamSize * 100).toFixed(2)} % of total`;
+            }
+        });
+
+        console.log (JSON.stringify({percentualRamUsage: percentualRamStats}, null, 4));
 
         this._buffer = null;
         this._finalized = true;
@@ -630,6 +693,8 @@ class TrianglesBatchingLayer {
         const textureWidth = 4;
 
         const texArray = new Uint8Array (4 * textureWidth * textureHeight);
+
+        ramStats.sizeDataColorsAndFlags +=texArray.byteLength;
 
         for (var i = 0; i < textureHeight; i++)
         {
@@ -711,6 +776,8 @@ class TrianglesBatchingLayer {
 
         var texArray = new Float16Array(4 * textureWidth * textureHeight);
 
+        ramStats.sizeDataPositionDecodeMatrices +=texArray.byteLength;
+
         for (var i = 0; i < positionDecodeMatrices.length; i++)
         {
             // 4 values
@@ -774,6 +841,8 @@ class TrianglesBatchingLayer {
         const texArraySize = textureWidth * textureHeight * 2
         const texArray = new Int8Array (texArraySize);
 
+        ramStats.sizeDataTextureNormals +=texArray.byteLength;
+
         texArray.fill(0);
         texArray.set(normals, 0)
 
@@ -825,6 +894,8 @@ class TrianglesBatchingLayer {
 
         const texArraySize = textureWidth * textureHeight * 3;
         const texArray = new Uint16Array (texArraySize);
+
+        ramStats.sizeDataTexturePositions +=texArray.byteLength;
 
         texArray.fill(0);
 
