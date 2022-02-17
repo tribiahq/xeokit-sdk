@@ -505,6 +505,16 @@ class TrianglesBatchingLayer {
 
         this._numVerts += portion.numVerts;
 
+        _lastCanCreatePortion = {
+            positions: null,
+            indices: null,
+            edgeIndices: null,
+            uniquePositions: null,
+            uniqueIndices: null,
+            uniqueEdgeIndices: null,
+            normalsPerPolygon: null,
+        };
+
         return portionId;
     }
 
