@@ -763,18 +763,32 @@ class TrianglesBatchingLayer {
 
         gl.bindTexture (gl.TEXTURE_2D, texture);
 
-        gl.texImage2D (
+        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8UI, textureWidth, textureHeight);
+
+        gl.texSubImage2D(
             gl.TEXTURE_2D,
             0,
-            gl.RGBA8UI,
+            0,
+            0,
             textureWidth,
             textureHeight,
-            0,
             gl.RGBA_INTEGER,
             gl.UNSIGNED_BYTE,
             texArray,
             0
         );
+        // gl.texImage2D (
+        //     gl.TEXTURE_2D,
+        //     0,
+        //     gl.RGBA8UI,
+        //     textureWidth,
+        //     textureHeight,
+        //     0,
+        //     gl.RGBA_INTEGER,
+        //     gl.UNSIGNED_BYTE,
+        //     texArray,
+        //     0
+        // );
 
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
@@ -822,19 +836,34 @@ class TrianglesBatchingLayer {
         const texture = gl.createTexture();
 
         gl.bindTexture (gl.TEXTURE_2D, texture);
+        
+        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA16F, textureWidth, textureHeight);
 
-        gl.texImage2D (
+        gl.texSubImage2D(
             gl.TEXTURE_2D,
             0,
-            gl.RGBA16F,
+            0,
+            0,
             textureWidth,
             textureHeight,
-            0,
             gl.RGBA,
             gl.HALF_FLOAT,
             new Uint16Array (texArray.buffer),
             0
         );
+
+        // gl.texImage2D (
+        //     gl.TEXTURE_2D,
+        //     0,
+        //     gl.RGBA16F,
+        //     textureWidth,
+        //     textureHeight,
+        //     0,
+        //     gl.RGBA,
+        //     gl.HALF_FLOAT,
+        //     new Uint16Array (texArray.buffer),
+        //     0
+        // );
 
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
@@ -882,17 +911,32 @@ class TrianglesBatchingLayer {
 
         gl.bindTexture (gl.TEXTURE_2D, texture);
 
-        gl.texImage2D (
+        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RG8I, textureWidth, textureHeight);
+
+        gl.texSubImage2D(
             gl.TEXTURE_2D,
             0,
-            gl.RG8I,
+            0,
+            0,
             textureWidth,
             textureHeight,
-            0,
             gl.RG_INTEGER,
             gl.BYTE,
-            texArray
+            texArray,
+            0
         );
+
+        // gl.texImage2D (
+        //     gl.TEXTURE_2D,
+        //     0,
+        //     gl.RG8I,
+        //     textureWidth,
+        //     textureHeight,
+        //     0,
+        //     gl.RG_INTEGER,
+        //     gl.BYTE,
+        //     texArray
+        // );
 
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
@@ -937,17 +981,32 @@ class TrianglesBatchingLayer {
 
         gl.bindTexture (gl.TEXTURE_2D, texture);
 
-        gl.texImage2D (
+        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGB16UI, textureWidth, textureHeight);
+
+        gl.texSubImage2D(
             gl.TEXTURE_2D,
             0,
-            gl.RGB16UI,
+            0,
+            0,
             textureWidth,
             textureHeight,
-            0,
             gl.RGB_INTEGER,
             gl.UNSIGNED_SHORT,
-            texArray    
+            texArray,
+            0
         );
+
+        // gl.texImage2D (
+        //     gl.TEXTURE_2D,
+        //     0,
+        //     gl.RGB16UI,
+        //     textureWidth,
+        //     textureHeight,
+        //     0,
+        //     gl.RGB_INTEGER,
+        //     gl.UNSIGNED_SHORT,
+        //     texArray    
+        // );
 
         gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
@@ -998,17 +1057,32 @@ class TrianglesBatchingLayer {
 
         gl.bindTexture (gl.TEXTURE_2D, texture);
 
-        gl.texImage2D (
+        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGB8UI, textureWidth, textureHeight);
+
+        gl.texSubImage2D(
             gl.TEXTURE_2D,
             0,
-            gl.RGB8UI,
+            0,
+            0,
             textureWidth,
             textureHeight,
-            0,
             gl.RGB_INTEGER,
             gl.UNSIGNED_BYTE,
-            texArray
+            texArray,
+            0
         );
+
+        // gl.texImage2D (
+        //     gl.TEXTURE_2D,
+        //     0,
+        //     gl.RGB8UI,
+        //     textureWidth,
+        //     textureHeight,
+        //     0,
+        //     gl.RGB_INTEGER,
+        //     gl.UNSIGNED_BYTE,
+        //     texArray
+        // );
 
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
