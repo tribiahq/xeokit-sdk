@@ -27,7 +27,6 @@ class TrianglesInstancingEdgesRenderer {
     }
 
     drawLayer(frameCtx, instancingLayer, renderPass) {
-
         const model = instancingLayer.model;
         const scene = model.scene;
         const camera = scene.camera;

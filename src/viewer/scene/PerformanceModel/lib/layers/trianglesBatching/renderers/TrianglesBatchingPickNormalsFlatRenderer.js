@@ -25,7 +25,6 @@ class TrianglesBatchingPickNormalsFlatRenderer {
     }
 
     drawLayer(frameCtx, batchingLayer, renderPass) {
-
         const model = batchingLayer.model;
         const scene = model.scene;
         const camera = scene.camera;
@@ -122,6 +121,22 @@ class TrianglesBatchingPickNormalsFlatRenderer {
             5
         ); // chipmunk
 
+        var rr6 = this._program.bindTexture(
+            this._uTexturePerPolygonIdIndices, 
+            {
+                bind: function (unit) {
+                    gl.activeTexture(gl["TEXTURE" + unit]);
+                    gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdIndices);
+                    return true;
+                },
+                unbind: function (unit) {
+                    gl.activeTexture(gl["TEXTURE" + unit]);
+                    gl.bindTexture(gl.TEXTURE_2D, null);
+                }
+            },
+            6
+        ); // chipmunk
+
         gl.uniform1i(this._uTexturePerObjectIdColorsAndFlagsHeight, state.texturePerObjectIdColorsAndFlagsHeight);
 
         gl.uniform1i(this._uRenderPass, renderPass);
@@ -170,8 +185,7 @@ class TrianglesBatchingPickNormalsFlatRenderer {
             this._aPackedVertexId.bindArrayBuffer(state.indicesBuf);
         }
 
-
-        gl.drawArrays(gl.TRIANGLES, 0, state.indicesBuf.numItems);
+        gl.drawArrays(gl.TRIANGLES, 0, state.numIndices);
 
         frameCtx.drawElements++;
     }
@@ -218,6 +232,7 @@ class TrianglesBatchingPickNormalsFlatRenderer {
         this._uTexturePerObjectIdColorsAndFlags = "uTexturePerObjectIdColorsAndFlags"; // chipmunk
         this._uTexturePerVertexIdCoordinates = "uTexturePerVertexIdCoordinates"; // chipmunk
         this._uTexturePerPolygonIdNormals = "uTexturePerPolygonIdNormals"; // chipmunk
+        this._uTexturePerPolygonIdIndices = "uTexturePerPolygonIdIndices"; // chipmunk
         this._uTexturePerPolygonIdPortionIds = "uTexturePerPolygonIdPortionIds"; // chipmunk
     }
 
@@ -270,6 +285,7 @@ class TrianglesBatchingPickNormalsFlatRenderer {
         src.push("uniform sampler2D uTexturePerObjectIdPositionsDecodeMatrix;"); // chipmunk
         src.push("uniform usampler2D uTexturePerObjectIdColorsAndFlags;"); // chipmunk
         src.push("uniform usampler2D uTexturePerVertexIdCoordinates;"); // chipmunk
+        src.push("uniform usampler2D uTexturePerPolygonIdIndices;"); // chipmunk
         src.push("uniform isampler2D uTexturePerPolygonIdNormals;"); // chipmunk
         src.push("uniform usampler2D uTexturePerPolygonIdPortionIds;"); // chipmunk
 
@@ -310,10 +326,14 @@ class TrianglesBatchingPickNormalsFlatRenderer {
         // get vertex base
         src.push("ivec4 packedVertexBase = ivec4(texelFetch (uTexturePerObjectIdColorsAndFlags, ivec2(4, objectIndex), 0));"); // chipmunk
 
-        src.push("int uniqueVertexIndex = int(packedVertexId.r) + (packedVertexBase.r << 24) + (packedVertexBase.g << 16) + (packedVertexBase.b << 8) + packedVertexBase.a;")
+        src.push("int h_index = polygonIndex & 511;")
+        src.push("int v_index = polygonIndex >> 9;")
+
+        src.push("ivec3 vertexIndices = ivec3(texelFetch(uTexturePerPolygonIdIndices, ivec2(h_index, v_index), 0));");
+        src.push("ivec3 uniqueVertexIndexes = vertexIndices + (packedVertexBase.r << 24) + (packedVertexBase.g << 16) + (packedVertexBase.b << 8) + packedVertexBase.a;")
         
-        src.push("int h_unique_position_index = (uniqueVertexIndex) & 511;")
-        src.push("int v_unique_position_index = (uniqueVertexIndex) >> 9;")
+        src.push("ivec3 indexPositionH = uniqueVertexIndexes & 511;")
+        src.push("ivec3 indexPositionV = uniqueVertexIndexes >> 9;")
 
         src.push("mat4 positionsDecodeMatrix = mat4 (texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(0, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(1, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(2, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(3, objectIndex), 0));")
 
@@ -322,7 +342,18 @@ class TrianglesBatchingPickNormalsFlatRenderer {
         src.push("uvec4 flags2 = texelFetch (uTexturePerObjectIdColorsAndFlags, ivec2(3, objectIndex), 0);"); // chipmunk
         
         // get position
-        src.push("vec3 position = vec3(texelFetch(uTexturePerVertexIdCoordinates, ivec2(h_unique_position_index, v_unique_position_index), 0).rgb);")
+        src.push("vec3 position1 = vec3(texelFetch(uTexturePerVertexIdCoordinates, ivec2(indexPositionH.r, indexPositionV.r), 0));")
+        src.push("vec3 position2 = vec3(texelFetch(uTexturePerVertexIdCoordinates, ivec2(indexPositionH.g, indexPositionV.g), 0));")
+        src.push("vec3 position3 = vec3(texelFetch(uTexturePerVertexIdCoordinates, ivec2(indexPositionH.b, indexPositionV.b), 0));")
+
+        // get normal
+        src.push("vec3 normal = -normalize(cross(position3 - position1, position2 - position1));");
+
+        src.push("int vertexNumber = gl_VertexID % 3;");
+        src.push("vec3 position;");
+        src.push("if (vertexNumber == 0) position = position1;");
+        src.push("else if (vertexNumber == 1) position = position2;");
+        src.push("else position = position3;");
 
         // flags.w = NOT_RENDERED | PICK
         // renderPass = PICK

@@ -24,10 +24,9 @@ let ramStats = {
     sizeDataColorsAndFlags: 0,
     sizeDataPositionDecodeMatrices: 0,
     sizeDataTexturePositions: 0,
-    sizeDataTextureNormals: 0,
+    sizeDataTextureIndices: 0,
+    sizeDataTextureEdgeIndices: 0,
     sizeDataTexturePortionIds: 0,
-    sizeIndices: 0,
-    sizeEdges: 0,
     numberOfPortions: 0,
     numberOfLayers: 0,
     cannotCreatePortion: {
@@ -49,7 +48,6 @@ let _lastCanCreatePortion = {
     uniquePositions: null,
     uniqueIndices: null,
     uniqueEdgeIndices: null,
-    normalsPerPolygon: null,
 };
 
 const tempMat4 = math.mat4();
@@ -262,20 +260,14 @@ class TrianglesBatchingLayer {
 
         ramStats.numberOfPortions++;
 
-        let normalsPerPolygon = null;
-
-        if (cfg.normals && cfg.indices) {
-            normalsPerPolygon = this.calculateNormalsPerPolygon (
-                cfg.indices,
-                cfg.normals
-            );
-        }
-
-        cfg.normals = normalsPerPolygon;
-
         cfg.positions = _lastCanCreatePortion.uniquePositions || [];
         cfg.indices = _lastCanCreatePortion.uniqueIndices;
-        cfg.edgeIndices = _lastCanCreatePortion.uniqueEdgeIndices;    
+        cfg.edgeIndices = _lastCanCreatePortion.uniqueEdgeIndices;
+
+        if ((cfg.positions.length / 3) > (1<<16))
+        {
+            console.log (`YAY! ${(cfg.positions.length / 3)} positions`);
+        }
 
         this._numUniqueVerts += cfg.positions.length / 3;
 
@@ -512,25 +504,9 @@ class TrianglesBatchingLayer {
             uniquePositions: null,
             uniqueIndices: null,
             uniqueEdgeIndices: null,
-            normalsPerPolygon: null,
         };
 
         return portionId;
-    }
-
-    calculateNormalsPerPolygon (indices, normals) {
-        let retVal = new Int8Array(indices.length/3*2);
-
-        for (let i = 0, len = indices.length / 3; i < len; i++) {
-            retVal [i*2] = Math.round((
-                normals [indices[i*3] * 3 + 0] + normals [indices[i*3+1] * 3 + 0] + normals [indices[i*3+2] * 3 + 0]
-            )/3);
-            retVal [i*2+1] = Math.round((
-                normals [indices[i*3] * 3 + 1] + normals [indices[i*3+1] * 3 + 1] + normals [indices[i*3+2] * 3 + 1]
-            )/3);
-        }
-
-        return retVal;
     }
 
     /**
@@ -585,16 +561,7 @@ class TrianglesBatchingLayer {
         state.texturePerObjectIdPositionsDecodeMatrix = decodeMatrixTexture.texture;
         state.texturePerObjectIdPositionsDecodeMatrixHeight = decodeMatrixTexture.textureHeight;
 
-        // c) normals texture
-        const normalsTexture = this.generateTextureForNormals (
-            gl,
-            buffer.normals
-        ); 
-
-        state.texturePerPolygonIdNormals = normalsTexture.texture;
-        state.texturePerPolygonIdNormalsHeight = normalsTexture.textureHeight;
-
-        // d) position coordinates texture
+        // c) position coordinates texture
         const texturePerVertexIdCoordinates = this.generateTextureForPositions (
             gl,
             buffer.positions
@@ -603,7 +570,7 @@ class TrianglesBatchingLayer {
         state.texturePerVertexIdCoordinates = texturePerVertexIdCoordinates.texture;
         state.texturePerVertexIdCoordinatesHeight = texturePerVertexIdCoordinates.textureHeight;
 
-        // d) portion Id texture for triangles
+        // d) portion Id triangles texture
         const texturePerPolygonIdPortionIds = this.generateTextureForPackedPortionIds (
             gl,
             this._portionIdForIndices
@@ -621,6 +588,25 @@ class TrianglesBatchingLayer {
         state.texturePerEdgeIdPortionIds = texturePerEdgeIdPortionIds.texture;
         state.texturePerEdgeIdPortionIdsHeight = texturePerEdgeIdPortionIds.textureHeight;
 
+        // f) indices texture
+        const texturePerPolygonIdIndices = this.generateTextureForIndices (
+            gl,
+            buffer.indices
+        );
+
+        state.texturePerPolygonIdIndices = texturePerPolygonIdIndices.texture;
+        state.texturePerPolygonIdIndicesHeight = texturePerPolygonIdIndices.textureHeight;
+        
+        // g) edge indices texture
+        const texturePerPolygonIdEdgeIndices = this.generateTextureForEdgeIndices (
+            gl,
+            buffer.edgeIndices
+        );
+
+        state.texturePerPolygonIdEdgeIndices = texturePerPolygonIdEdgeIndices.texture;
+        state.texturePerPolygonIdEdgeIndicesHeight = texturePerPolygonIdEdgeIndices.textureHeight;
+        
+        
         // end of chipmunk
 
         // if (buffer.metallicRoughness.length > 0) {
@@ -636,25 +622,9 @@ class TrianglesBatchingLayer {
         //     }
         // }
 
-        const bigIndicesSupported = WEBGL_INFO.SUPPORTED_EXTENSIONS["OES_element_index_uint"];
+        state.numIndices = buffer.indices.length;
 
-        if (buffer.indices.length > 0) {
-            const indices = new Uint16Array(buffer.indices);
-
-            ramStats.sizeIndices += indices.byteLength;
-
-            state.indicesBuf = new ArrayBuf(gl, gl.ARRAY_BUFFER, indices, indices.length, 1, gl.STATIC_DRAW);
-
-            state.numTriangles = Math.floor (indices.length / 3);
-        }
-
-        if (buffer.edgeIndices.length > 0) {
-            const edgeIndices = new Uint16Array(buffer.edgeIndices);
-
-            ramStats.sizeEdges += edgeIndices.byteLength;
-
-            state.edgeIndicesBuf = new ArrayBuf(gl, gl.ARRAY_BUFFER, edgeIndices, edgeIndices.length, 1, gl.STATIC_DRAW);
-        }
+        state.numEdgeIndices = buffer.edgeIndices.length;
 
         console.log (JSON.stringify(ramStats, null, 4));
 
@@ -879,39 +849,84 @@ class TrianglesBatchingLayer {
     }
 
     /**
-     * This will generate a texture for all normals in the layer.
-     * 
-     * The texture will contain just one normal per triangle, instead of one normal per vertex.
-     *
-     * At the moment, it is just taking the normal corresponding to the 1st vertex for each triangle.
-     *  
-     * The texture will have:
-     * - 512 16-bit (encoded as RG 8-bit components) columns
-     * - a number of rows R where R*512 is just >= than the number of triangles
-     * 
-     * @param {*} gl WebGL2Context 
-     * @param {*} indices Array of indices for the layer
-     * @param {*} normals Array of normals for the layer
-     * 
-     * @returns The created texture and its height
+     * TODO: document
      */
-    generateTextureForNormals (gl, normals) {
+    generateTextureForIndices (gl, indices) {
         const textureWidth = 512;
-        const textureHeight = Math.ceil (normals.length / textureWidth);
+        const textureHeight = Math.ceil (indices.length / 3 / textureWidth);
 
-        const texArraySize = textureWidth * textureHeight * 2
-        const texArray = new Int8Array (texArraySize);
+        const texArraySize = textureWidth * textureHeight * 3;
+        const texArray = new Uint16Array (texArraySize);
 
-        ramStats.sizeDataTextureNormals +=texArray.byteLength;
+        ramStats.sizeDataTextureIndices +=texArray.byteLength;
 
         texArray.fill(0);
-        texArray.set(normals, 0)
+        texArray.set(indices, 0)
 
         const texture = gl.createTexture();
 
         gl.bindTexture (gl.TEXTURE_2D, texture);
 
-        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RG8I, textureWidth, textureHeight);
+        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGB16UI, textureWidth, textureHeight);
+
+        gl.texSubImage2D(
+            gl.TEXTURE_2D,
+            0,
+            0,
+            0,
+            textureWidth,
+            textureHeight,
+            gl.RGB_INTEGER,
+            gl.UNSIGNED_SHORT,
+            texArray,
+            0
+        );
+
+        // gl.texImage2D (
+        //     gl.TEXTURE_2D,
+        //     0,
+        //     gl.RGB16UI,
+        //     textureWidth,
+        //     textureHeight,
+        //     0,
+        //     gl.RGB_INTEGER,
+        //     gl.UNSIGNED_SHORT,
+        //     texArray
+        // );
+
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+        gl.bindTexture(gl.TEXTURE_2D, null);
+
+        return {
+            texture,
+            textureHeight
+        };
+    }
+
+    /**
+     * TODO: comment
+     */
+    generateTextureForEdgeIndices (gl, edgeIndices) {
+        const textureWidth = 512;
+        const textureHeight = Math.ceil (edgeIndices.length / 2 / textureWidth);
+
+        const texArraySize = textureWidth * textureHeight * 2;
+        const texArray = new Uint16Array (texArraySize);
+
+        ramStats.sizeDataTextureEdgeIndices +=texArray.byteLength;
+
+        texArray.fill(0);
+        texArray.set(edgeIndices, 0)
+
+        const texture = gl.createTexture();
+
+        gl.bindTexture (gl.TEXTURE_2D, texture);
+
+        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RG16UI, textureWidth, textureHeight);
 
         gl.texSubImage2D(
             gl.TEXTURE_2D,
@@ -921,7 +936,7 @@ class TrianglesBatchingLayer {
             textureWidth,
             textureHeight,
             gl.RG_INTEGER,
-            gl.BYTE,
+            gl.UNSIGNED_SHORT,
             texArray,
             0
         );
@@ -929,12 +944,12 @@ class TrianglesBatchingLayer {
         // gl.texImage2D (
         //     gl.TEXTURE_2D,
         //     0,
-        //     gl.RG8I,
+        //     gl.RGB16UI,
         //     textureWidth,
         //     textureHeight,
         //     0,
-        //     gl.RG_INTEGER,
-        //     gl.BYTE,
+        //     gl.RGB_INTEGER,
+        //     gl.UNSIGNED_SHORT,
         //     texArray
         // );
 
@@ -1098,7 +1113,7 @@ class TrianglesBatchingLayer {
     }
         
     isEmpty() {
-        return (!this._state.indicesBuf);
+        return this._numPortions == 0;
     }
 
     initFlags(portionId, flags, meshTransparent) {

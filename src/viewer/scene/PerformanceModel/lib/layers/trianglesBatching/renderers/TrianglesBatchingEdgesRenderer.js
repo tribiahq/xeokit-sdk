@@ -27,7 +27,6 @@ class TrianglesBatchingEdgesRenderer {
     }
 
     drawLayer(frameCtx, batchingLayer, renderPass) {
-
         const model = batchingLayer.model;
         const scene = model.scene;
         const camera = scene.camera;
