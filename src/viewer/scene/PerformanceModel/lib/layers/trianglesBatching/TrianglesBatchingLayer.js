@@ -18,6 +18,8 @@ const MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER = (1 << 12);
 // 2048 is max data texture height
 const MAX_DATA_TEXTURE_HEIGHT = (1 << 11);
 
+const INDICES_EDGE_INDICES_ALIGNEMENT_SIZE = 8;
+
 let _maxEdgePortions = 2;
 
 let ramStats = {
@@ -32,7 +34,9 @@ let ramStats = {
     cannotCreatePortion: {
         because10BitsObjectId: 0,
         becauseTextureSize: 0,
-    }
+    },
+    overheadSizeAlignementIndices: 0, 
+    overheadSizeAlignementEdgeIndices: 0, 
 };
 
 let _numTotalPolygons = 0;
@@ -269,6 +273,36 @@ class TrianglesBatchingLayer {
             console.log (`YAY! ${(cfg.positions.length / 3)} positions`);
         }
 
+        // Indices 64-triangles aglignement
+        if (cfg.indices)
+        {
+            const alignedIndicesLen = Math.ceil ((cfg.indices.length / 3) / INDICES_EDGE_INDICES_ALIGNEMENT_SIZE) * INDICES_EDGE_INDICES_ALIGNEMENT_SIZE * 3;
+
+            ramStats.overheadSizeAlignementIndices += 2 * (alignedIndicesLen - cfg.indices.length);
+
+            {
+                const alignedIndices = new Uint32Array(alignedIndicesLen);
+                alignedIndices.fill(0);
+                alignedIndices.set (cfg.indices);
+                cfg.indices = alignedIndices;
+            }
+        }
+
+        // EdgeIndices 64-edged alignement
+        if (cfg.edgeIndices)
+        {
+            const alignedEdgeIndicesLen = Math.ceil ((cfg.edgeIndices.length / 2) / INDICES_EDGE_INDICES_ALIGNEMENT_SIZE) * INDICES_EDGE_INDICES_ALIGNEMENT_SIZE * 2;
+
+            ramStats.overheadSizeAlignementEdgeIndices += 2 * (alignedEdgeIndicesLen - cfg.edgeIndices.length);
+
+            {
+                const alignedEdgeIndices = new Uint32Array(alignedEdgeIndicesLen);
+                alignedEdgeIndices.fill(0);
+                alignedEdgeIndices.set (cfg.edgeIndices);
+                cfg.edgeIndices = alignedEdgeIndices;
+            }
+        }
+        
         this._numUniqueVerts += cfg.positions.length / 3;
 
         this._objectDataPositionsMatrices.push (this._positionsDecodeMatrix);
@@ -441,20 +475,28 @@ class TrianglesBatchingLayer {
         this._vertexBasesForObject.push (vertsIndex); // chupmunk
 
         if (indices) {
+            let triangleNumber = 0;
             for (let i = 0, len = indices.length; i < len; i+=3) {
                 buffer.indices.push(indices[i]);
                 buffer.indices.push(indices[i+1]);
                 buffer.indices.push(indices[i+2]);
-                this._portionIdForIndices.push (this._numPortions);
+                if ((triangleNumber % INDICES_EDGE_INDICES_ALIGNEMENT_SIZE) == 0) {
+                    this._portionIdForIndices.push (this._numPortions);
+                }
+                triangleNumber++;
             }
             this._numIndicesInLayer += indices.length; // chupmunk
         }
 
         if (edgeIndices) {
+            let edgeNumber = 0;
             for (let i = 0, len = edgeIndices.length; i < len; i+=2) {
                 buffer.edgeIndices.push(edgeIndices[i]);
                 buffer.edgeIndices.push(edgeIndices[i+1]);
-                this._portionIdForEdges.push (this._numPortions);
+                if ((edgeNumber % INDICES_EDGE_INDICES_ALIGNEMENT_SIZE) == 0) {
+                    this._portionIdForEdges.push (this._numPortions);
+                }
+                edgeNumber++;
             }
             this._numEdgeIndicesInLayer += edgeIndices.length; // chupmunk
         }

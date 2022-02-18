@@ -314,13 +314,13 @@ class TrianglesBatchingPickMeshRenderer {
         src.push("int v_normal_index = polygonIndex >> 9;")
 
         // get packed object-id
-        src.push("int h_packed_object_id_index = (polygonIndex / 2) & 511;")
-        src.push("int v_packed_object_id_index = (polygonIndex / 2) >> 9;")
+        src.push("int h_packed_object_id_index = ((polygonIndex >> 3) / 2) & 511;")
+        src.push("int v_packed_object_id_index = ((polygonIndex >> 3) / 2) >> 9;")
 
         src.push("ivec3 packedObjectId = ivec3(texelFetch(uTexturePerPolygonIdPortionIds, ivec2(h_packed_object_id_index, v_packed_object_id_index), 0).rgb);");
 
         src.push("int objectIndex;")
-        src.push("if ((polygonIndex % 2) == 0) {")
+        src.push("if (((polygonIndex >> 3) % 2) == 0) {")
         src.push("  objectIndex = (packedObjectId.r << 4) + (packedObjectId.g >> 4);")
         src.push("} else {") 
         src.push("  objectIndex = ((packedObjectId.g & 15) << 8) + packedObjectId.b;")
