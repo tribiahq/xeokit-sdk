@@ -449,11 +449,6 @@ class Canvas extends Component {
                 if (WEBGL_INFO.SUPPORTED_EXTENSIONS["WEBGL_depth_texture"]) {
                     this.gl.getExtension('WEBGL_depth_texture');
                 }
-                if (WEBGL_INFO.SUPPORTED_EXTENSIONS["OES_texture_float"]) {
-                    this.gl.getExtension('OES_texture_float');
-                } else {
-                    alert ("No support for WebGL extension OES_texture_float");
-                }
             }
         }
     }
