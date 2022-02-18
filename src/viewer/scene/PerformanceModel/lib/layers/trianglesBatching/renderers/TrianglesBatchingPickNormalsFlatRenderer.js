@@ -239,10 +239,6 @@ class TrianglesBatchingPickNormalsFlatRenderer {
         src.push("#version 300 es");
         src.push("// Triangles batching pick flat normals vertex shader");
 
-        if (scene.logarithmicDepthBufferEnabled && WEBGL_INFO.SUPPORTED_EXTENSIONS["EXT_frag_depth"]) {
-            src.push("#extension GL_EXT_frag_depth : enable");
-        }
-
         src.push("#ifdef GL_FRAGMENT_PRECISION_HIGH");
         src.push("precision highp float;");
         src.push("precision highp int;");
@@ -279,13 +275,11 @@ class TrianglesBatchingPickNormalsFlatRenderer {
 
         if (scene.logarithmicDepthBufferEnabled) {
             src.push("uniform float logDepthBufFC;");
-            if (WEBGL_INFO.SUPPORTED_EXTENSIONS["EXT_frag_depth"]) {
-                src.push("varying float vFragDepth;");
-            }
+            src.push("out float vFragDepth;");
             src.push("bool isPerspectiveMatrix(mat4 m) {");
             src.push("    return (m[2][3] == - 1.0);");
             src.push("}");
-            src.push("varying float isPerspective;");
+            src.push("out float isPerspective;");
         }
         src.push("out vec4 vWorldPosition;");
         if (clipping) {
@@ -346,12 +340,7 @@ class TrianglesBatchingPickNormalsFlatRenderer {
         }
         src.push("vec4 clipPos = projMatrix * viewPosition;");
         if (scene.logarithmicDepthBufferEnabled) {
-            if (WEBGL_INFO.SUPPORTED_EXTENSIONS["EXT_frag_depth"]) {
-                src.push("vFragDepth = 1.0 + clipPos.w;");
-            } else {
-                src.push("clipPos.z = log2( max( 1e-6, clipPos.w + 1.0 ) ) * logDepthBufFC - 1.0;");
-                src.push("clipPos.z *= clipPos.w;");
-            }
+            src.push("vFragDepth = 1.0 + clipPos.w;");
             src.push("isPerspective = float (isPerspectiveMatrix(projMatrix));");
         }
         src.push("gl_Position = clipPos;");
@@ -368,7 +357,7 @@ class TrianglesBatchingPickNormalsFlatRenderer {
         src.push ('#version 300 es');
         src.push("// Triangles batching pick flat normals fragment shader");
         src.push("#extension GL_OES_standard_derivatives : enable");
-        if (scene.logarithmicDepthBufferEnabled && WEBGL_INFO.SUPPORTED_EXTENSIONS["EXT_frag_depth"]) {
+        if (scene.logarithmicDepthBufferEnabled) {
             src.push("#extension GL_EXT_frag_depth : enable");
         }
         src.push("#ifdef GL_FRAGMENT_PRECISION_HIGH");
@@ -378,8 +367,8 @@ class TrianglesBatchingPickNormalsFlatRenderer {
         src.push("precision mediump float;");
         src.push("precision mediump int;");
         src.push("#endif");
-        if (scene.logarithmicDepthBufferEnabled && WEBGL_INFO.SUPPORTED_EXTENSIONS["EXT_frag_depth"]) {
-            src.push("varying float isPerspective;");
+        if (scene.logarithmicDepthBufferEnabled) {
+            src.push("in float isPerspective;");
             src.push("uniform float logDepthBufFC;");
             src.push("in float vFragDepth;");
         }
@@ -406,8 +395,8 @@ class TrianglesBatchingPickNormalsFlatRenderer {
             src.push("      if (dist > 0.0) { discard; }");
             src.push("  }");
         }
-        if (scene.logarithmicDepthBufferEnabled && WEBGL_INFO.SUPPORTED_EXTENSIONS["EXT_frag_depth"]) {
-            src.push("    gl_FragDepthEXT = isPerspective == 0.0 ? gl_FragCoord.z : log2( vFragDepth ) * logDepthBufFC * 0.5;");
+        if (scene.logarithmicDepthBufferEnabled) {
+            src.push("    gl_FragDepth = isPerspective == 0.0 ? gl_FragCoord.z : log2( vFragDepth ) * logDepthBufFC * 0.5;");
         }
         src.push("  vec3 xTangent = dFdx( vWorldPosition.xyz );");
         src.push("  vec3 yTangent = dFdy( vWorldPosition.xyz );");
