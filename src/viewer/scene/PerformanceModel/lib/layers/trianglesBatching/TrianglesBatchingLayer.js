@@ -31,6 +31,7 @@ let ramStats = {
     sizeDataTexturePortionIds: 0,
     numberOfPortions: 0,
     numberOfLayers: 0,
+    totalPolygons: 0,
     cannotCreatePortion: {
         because10BitsObjectId: 0,
         becauseTextureSize: 0,
@@ -144,8 +145,12 @@ class TrianglesBatchingLayer {
 
         this._numUniqueVerts = 0;
 
-        this._numIndicesInLayer = 0;
-        this._numEdgeIndicesInLayer = 0;
+        this._numIndicesInLayer8Bits = 0;
+        this._numIndicesInLayer16Bits = 0;
+        this._numIndicesInLayer32Bits = 0;
+        this._numEdgeIndicesInLayer8Bits = 0;
+        this._numEdgeIndicesInLayer16Bits = 0;
+        this._numEdgeIndicesInLayer32Bits = 0;
 
         this._finalized = false;
 
@@ -159,11 +164,16 @@ class TrianglesBatchingLayer {
         this._objectDataPositionsMatrices = []; // chipmunk
         this._objectDataColors = [];
         this._objectDataPickColors = [];
+        this._objectBytesPerIndex = [];
 
         this._vertexBasesForObject = []; // chipmunk
 
-        this._portionIdForIndices = []; // chipmunk
-        this._portionIdForEdges = []; // chipmunk
+        this._portionIdForIndices8Bits = []; // chipmunk
+        this._portionIdForIndices16Bits = []; // chipmunk
+        this._portionIdForIndices32Bits = []; // chipmunk
+        this._portionIdForEdges8Bits = []; // chipmunk
+        this._portionIdForEdges16Bits = []; // chipmunk
+        this._portionIdForEdges32Bits = []; // chipmunk
 
         if (cfg.origin) {
             this._state.origin = math.vec3(cfg.origin);
@@ -218,15 +228,21 @@ class TrianglesBatchingLayer {
             ramStats.cannotCreatePortion.because10BitsObjectId++;
         }
 
+        const maxIndicesOfAnyBits = Math.max (
+            this._numIndicesInLayer8Bits,
+            this._numIndicesInLayer16Bits,
+            this._numIndicesInLayer32Bits,
+        ) ;
+
         if (!(((this._numUniqueVerts + (_lastCanCreatePortion.uniquePositions.length / 3)) / 512) <= MAX_DATA_TEXTURE_HEIGHT &&
-            ((this._numIndicesInLayer + (_lastCanCreatePortion.uniqueIndices.length / 3)) / 512) <= MAX_DATA_TEXTURE_HEIGHT))
+            ((maxIndicesOfAnyBits + (_lastCanCreatePortion.uniqueIndices.length / 3)) / 512) <= MAX_DATA_TEXTURE_HEIGHT))
         {
             ramStats.cannotCreatePortion.becauseTextureSize++;
         }
 
         let retVal = this._numPortions < MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER && 
                      ((this._numUniqueVerts + (_lastCanCreatePortion.uniquePositions.length / 3)) / 512) <= MAX_DATA_TEXTURE_HEIGHT &&
-                     ((this._numIndicesInLayer + (_lastCanCreatePortion.uniqueIndices.length / 3)) / 512) <= MAX_DATA_TEXTURE_HEIGHT;
+                     ((maxIndicesOfAnyBits + (_lastCanCreatePortion.uniqueIndices.length / 3)) / 512) <= MAX_DATA_TEXTURE_HEIGHT;
 
         if (!retVal)
         {
@@ -474,32 +490,157 @@ class TrianglesBatchingLayer {
 
         this._vertexBasesForObject.push (vertsIndex); // chupmunk
 
+        const numUniquePositions = positions.length / 3;
+
+        if (numUniquePositions <= 256) {
+            this._objectBytesPerIndex.push (1);        
+        } else if (numUniquePositions <= 65536) {
+            this._objectBytesPerIndex.push (2);
+        } else {
+            this._objectBytesPerIndex.push (4);
+        }
+
+        let fanOutImprovement = 0;
+
         if (indices) {
+            {
+                const idealBytesPerIndex = Math.log2(numUniquePositions) / 8;
+
+                ramStats.idealIndicesSize = (ramStats.idealIndicesSize || 0) + Math.max (
+                    idealBytesPerIndex * indices.length,
+                    1
+                );
+
+                let fanOutPositions = 0;
+
+                if (idealBytesPerIndex <= 1) {
+
+                } else if (idealBytesPerIndex < 2) {
+                    fanOutPositions = idealBytesPerIndex - 1;
+                } else {
+                    fanOutPositions = idealBytesPerIndex - 2;
+                }
+
+                fanOutImprovement -= Math.ceil (numUniquePositions * fanOutPositions) * 6;
+            }
+            {
+                if (numUniquePositions <= 256) {
+                    ramStats.edges8BitsSpace = (ramStats.edges8BitsSpace || 0) + indices.length;
+                } else if (numUniquePositions <= 65536) {
+                    ramStats.edges16BitsSpace = (ramStats.edges16BitsSpace || 0) + indices.length * 2;
+                    fanOutImprovement += indices.length;
+                } else {
+                    ramStats.edges32BitsSpace = (ramStats.edges32BitsSpace || 0) + indices.length * 4;
+                    fanOutImprovement += indices.length * 2;
+                }
+
+                ramStats.optimizedEdgesSpace = (ramStats.edges8BitsSpace || 0) + (ramStats.edges16BitsSpace || 0) + (ramStats.edges32BitsSpace || 0);
+                ramStats.nonOptimizedEdgesSpace = (ramStats.nonOptimizedEdgesSpace || 0) + indices.length * 2;
+                ramStats.optimizedEdgesSavings = (ramStats.nonOptimizedEdgesSpace - ramStats.optimizedEdgesSpace);
+            }
             let triangleNumber = 0;
             for (let i = 0, len = indices.length; i < len; i+=3) {
-                buffer.indices.push(indices[i]);
-                buffer.indices.push(indices[i+1]);
-                buffer.indices.push(indices[i+2]);
+                if (numUniquePositions <= 256) {
+                    buffer.indices8Bits.push(indices[i]);
+                    buffer.indices8Bits.push(indices[i+1]);
+                    buffer.indices8Bits.push(indices[i+2]);
+                } else if (numUniquePositions <= 65536) {
+                    buffer.indices16Bits.push(indices[i]);
+                    buffer.indices16Bits.push(indices[i+1]);
+                    buffer.indices16Bits.push(indices[i+2]);
+                } else {
+                    buffer.indices32Bits.push(indices[i]);
+                    buffer.indices32Bits.push(indices[i+1]);
+                    buffer.indices32Bits.push(indices[i+2]);
+                }
+                // buffer.indices.push(indices[i]);
+                // buffer.indices.push(indices[i+1]);
+
                 if ((triangleNumber % INDICES_EDGE_INDICES_ALIGNEMENT_SIZE) == 0) {
-                    this._portionIdForIndices.push (this._numPortions);
+                    if (numUniquePositions <= 256) {
+                        this._portionIdForIndices8Bits.push (this._numPortions);
+                    } else if (numUniquePositions <= 63356) {
+                        this._portionIdForIndices16Bits.push (this._numPortions);
+                    }
+                    else {
+                        this._portionIdForIndices32Bits.push (this._numPortions);
+                    }
                 }
                 triangleNumber++;
             }
-            this._numIndicesInLayer += indices.length; // chupmunk
+
+            if (numUniquePositions <= 256) {
+                this._numIndicesInLayer8Bits += indices.length; // chupmunk
+            } else if (numUniquePositions <= 65536) {
+                this._numIndicesInLayer16Bits += indices.length; // chupmunk
+            } else {
+                this._numIndicesInLayer32Bits += indices.length; // chupmunk
+            }
+
+            ramStats.totalPolygons += indices.length / 3;
         }
 
         if (edgeIndices) {
+            {
+                const idealBytesPerIndex = Math.log2(numUniquePositions) / 8;
+
+                ramStats.idealEdgeIndicesSize = (ramStats.idealEdgeIndicesSize || 0) + Math.max (
+                    idealBytesPerIndex * edgeIndices.length,
+                    1
+                );
+            }
+            {
+                if (numUniquePositions <= 256) {
+                    ramStats.edges8BitsSpace = (ramStats.edges8BitsSpace || 0) + edgeIndices.length;
+                } else if (numUniquePositions <= 65536) {
+                    ramStats.edges16BitsSpace = (ramStats.edges16BitsSpace || 0) + edgeIndices.length * 2;
+                    fanOutImprovement += edgeIndices.length;
+                } else {
+                    ramStats.edges32BitsSpace = (ramStats.edges32BitsSpace || 0) + edgeIndices.length * 4;
+                    fanOutImprovement += edgeIndices.length * 2;
+                }
+
+                ramStats.optimizedEdgesSpace = (ramStats.edges8BitsSpace || 0) + (ramStats.edges16BitsSpace || 0) + (ramStats.edges32BitsSpace || 0);
+                ramStats.nonOptimizedEdgesSpace = (ramStats.nonOptimizedEdgesSpace || 0) + edgeIndices.length * 2;
+                ramStats.optimizedEdgesSavings = (ramStats.nonOptimizedEdgesSpace - ramStats.optimizedEdgesSpace);
+            }
+
             let edgeNumber = 0;
             for (let i = 0, len = edgeIndices.length; i < len; i+=2) {
-                buffer.edgeIndices.push(edgeIndices[i]);
-                buffer.edgeIndices.push(edgeIndices[i+1]);
+                if (numUniquePositions <= 256) {
+                    buffer.edgeIndices8Bits.push(edgeIndices[i]);
+                    buffer.edgeIndices8Bits.push(edgeIndices[i+1]);
+                } else if (numUniquePositions <= 65536) {
+                    buffer.edgeIndices16Bits.push(edgeIndices[i]);
+                    buffer.edgeIndices16Bits.push(edgeIndices[i+1]);
+                } else {
+                    buffer.edgeIndices32Bits.push(edgeIndices[i]);
+                    buffer.edgeIndices32Bits.push(edgeIndices[i+1]);
+                }
+                // buffer.edgeIndices.push(edgeIndices[i]);
+                // buffer.edgeIndices.push(edgeIndices[i+1]);
                 if ((edgeNumber % INDICES_EDGE_INDICES_ALIGNEMENT_SIZE) == 0) {
-                    this._portionIdForEdges.push (this._numPortions);
+                    if (numUniquePositions <= 256) {
+                        this._portionIdForEdges8Bits.push (this._numPortions);
+                    } else if (numUniquePositions <= 63356) {
+                        this._portionIdForEdges16Bits.push (this._numPortions);
+                    }
+                    else {
+                        this._portionIdForEdges32Bits.push (this._numPortions);
+                    }
                 }
                 edgeNumber++;
             }
-            this._numEdgeIndicesInLayer += edgeIndices.length; // chupmunk
+            if (numUniquePositions <= 256) {
+                this._numEdgeIndicesInLayer8Bits += indices.length; // chupmunk
+            } else if (numUniquePositions <= 65536) {
+                this._numEdgeIndicesInLayer16Bits += indices.length; // chupmunk
+            } else {
+                this._numEdgeIndicesInLayer32Bits += indices.length; // chupmunk
+            }
         }
+
+        ramStats._fanOutImprovement = (ramStats._fanOutImprovement || 0) + Math.max(fanOutImprovement, 0);
 
         // start of chipmunk
         this._objectDataPickColors.push (
@@ -566,7 +707,7 @@ class TrianglesBatchingLayer {
         const gl = this.model.scene.canvas.gl;
         const buffer = this._buffer;
 
-        _numTotalEdges2 += buffer.edgeIndices.length / 2;
+        // _numTotalEdges2 += buffer.edgeIndices.length / 2;
 
         // start of chipmunk
         // console.log (JSON.stringify({
@@ -588,7 +729,8 @@ class TrianglesBatchingLayer {
             gl,
             this._objectDataColors,
             this._objectDataPickColors,
-            this._vertexBasesForObject
+            this._vertexBasesForObject,
+            this._objectBytesPerIndex
         );
 
         state.texturePerObjectIdColorsAndFlags = colorsAndFlagsTexture.texture;
@@ -613,40 +755,113 @@ class TrianglesBatchingLayer {
         state.texturePerVertexIdCoordinatesHeight = texturePerVertexIdCoordinates.textureHeight;
 
         // d) portion Id triangles texture
-        const texturePerPolygonIdPortionIds = this.generateTextureForPackedPortionIds (
+        const texturePerPolygonIdPortionIds8Bits = this.generateTextureForPackedPortionIds (
             gl,
-            this._portionIdForIndices
+            this._portionIdForIndices8Bits
         );
 
-        state.texturePerPolygonIdPortionIds = texturePerPolygonIdPortionIds.texture;
-        state.texturePerPolygonIdPortionIdsHeight = texturePerPolygonIdPortionIds.textureHeight;
+        state.texturePerPolygonIdPortionIds8Bits = texturePerPolygonIdPortionIds8Bits.texture;
+        state.texturePerPolygonIdPortionIds8BitsHeight = texturePerPolygonIdPortionIds8Bits.textureHeight;
+
+        const texturePerPolygonIdPortionIds16Bits = this.generateTextureForPackedPortionIds (
+            gl,
+            this._portionIdForIndices16Bits
+        );
+
+        state.texturePerPolygonIdPortionIds16Bits = texturePerPolygonIdPortionIds16Bits.texture;
+        state.texturePerPolygonIdPortionIds16BitsHeight = texturePerPolygonIdPortionIds16Bits.textureHeight;
+
+        const texturePerPolygonIdPortionIds32Bits = this.generateTextureForPackedPortionIds (
+            gl,
+            this._portionIdForIndices32Bits
+        );
+
+        state.texturePerPolygonIdPortionIds32Bits = texturePerPolygonIdPortionIds32Bits.texture;
+        state.texturePerPolygonIdPortionIds32BitsHeight = texturePerPolygonIdPortionIds32Bits.textureHeight;
 
         // e) portion Id texture for edges
-        const texturePerEdgeIdPortionIds = this.generateTextureForPackedPortionIds (
+        // const texturePerEdgeIdPortionIds = this.generateTextureForPackedPortionIds (
+        //     gl,
+        //     this._portionIdForEdges,
+        // );
+
+        // state.texturePerEdgeIdPortionIds = texturePerEdgeIdPortionIds.texture;
+        // state.texturePerEdgeIdPortionIdsHeight = texturePerEdgeIdPortionIds.textureHeight;
+
+        const texturePerEdgeIdPortionIds8Bits = this.generateTextureForPackedPortionIds (
             gl,
-            this._portionIdForEdges,
+            this._portionIdForEdges8Bits
         );
 
-        state.texturePerEdgeIdPortionIds = texturePerEdgeIdPortionIds.texture;
-        state.texturePerEdgeIdPortionIdsHeight = texturePerEdgeIdPortionIds.textureHeight;
+        state.texturePerEdgeIdPortionIds8Bits = texturePerEdgeIdPortionIds8Bits.texture;
+        state.texturePerEdgeIdPortionIds8BitsHeight = texturePerEdgeIdPortionIds8Bits.textureHeight;
+
+        const texturePerEdgeIdPortionIds16Bits = this.generateTextureForPackedPortionIds (
+            gl,
+            this._portionIdForEdges16Bits
+        );
+
+        state.texturePerEdgeIdPortionIds16Bits = texturePerEdgeIdPortionIds16Bits.texture;
+        state.texturePerEdgeIdPortionIds16BitsHeight = texturePerEdgeIdPortionIds16Bits.textureHeight;
+
+        const texturePerEdgeIdPortionIds32Bits = this.generateTextureForPackedPortionIds (
+            gl,
+            this._portionIdForEdges32Bits
+        );
+
+        state.texturePerEdgeIdPortionIds32Bits = texturePerEdgeIdPortionIds32Bits.texture;
+        state.texturePerEdgeIdPortionIds32BitsHeight = texturePerEdgeIdPortionIds32Bits.textureHeight;
+
 
         // f) indices texture
-        const texturePerPolygonIdIndices = this.generateTextureForIndices (
+        const texturePerPolygonIdIndices8Bits = this.generateTextureFor8BitIndices (
             gl,
-            buffer.indices
+            buffer.indices8Bits
         );
 
-        state.texturePerPolygonIdIndices = texturePerPolygonIdIndices.texture;
-        state.texturePerPolygonIdIndicesHeight = texturePerPolygonIdIndices.textureHeight;
+        state.texturePerPolygonIdIndices8Bits = texturePerPolygonIdIndices8Bits.texture;
+        state.texturePerPolygonIdIndices8BitsHeight = texturePerPolygonIdIndices8Bits.textureHeight;
+
+        const texturePerPolygonIdIndices16Bits = this.generateTextureFor16BitIndices (
+            gl,
+            buffer.indices16Bits
+        );
+
+        state.texturePerPolygonIdIndices16Bits = texturePerPolygonIdIndices16Bits.texture;
+        state.texturePerPolygonIdIndices16BitsHeight = texturePerPolygonIdIndices16Bits.textureHeight;
+
+        const texturePerPolygonIdIndices32Bits = this.generateTextureFor32BitIndices (
+            gl,
+            buffer.indices32Bits
+        );
+
+        state.texturePerPolygonIdIndices32Bits = texturePerPolygonIdIndices32Bits.texture;
+        state.texturePerPolygonIdIndices32BitsHeight = texturePerPolygonIdIndices32Bits.textureHeight;
         
         // g) edge indices texture
-        const texturePerPolygonIdEdgeIndices = this.generateTextureForEdgeIndices (
+        const texturePerPolygonIdEdgeIndices8Bits = this.generateTextureFor8BitsEdgeIndices (
             gl,
-            buffer.edgeIndices
+            buffer.edgeIndices8Bits
         );
 
-        state.texturePerPolygonIdEdgeIndices = texturePerPolygonIdEdgeIndices.texture;
-        state.texturePerPolygonIdEdgeIndicesHeight = texturePerPolygonIdEdgeIndices.textureHeight;
+        state.texturePerPolygonIdEdgeIndices8Bits = texturePerPolygonIdEdgeIndices8Bits.texture;
+        state.texturePerPolygonIdEdgeIndices8BitsHeight = texturePerPolygonIdEdgeIndices8Bits.textureHeight;
+        
+        const texturePerPolygonIdEdgeIndices16Bits = this.generateTextureFor16BitsEdgeIndices (
+            gl,
+            buffer.edgeIndices16Bits
+        );
+
+        state.texturePerPolygonIdEdgeIndices16Bits = texturePerPolygonIdEdgeIndices16Bits.texture;
+        state.texturePerPolygonIdEdgeIndices16BitsHeight = texturePerPolygonIdEdgeIndices16Bits.textureHeight;
+        
+        const texturePerPolygonIdEdgeIndices32Bits = this.generateTextureFor32BitsEdgeIndices (
+            gl,
+            buffer.edgeIndices32Bits
+        );
+
+        state.texturePerPolygonIdEdgeIndices32Bits = texturePerPolygonIdEdgeIndices32Bits.texture;
+        state.texturePerPolygonIdEdgeIndices32BitsHeight = texturePerPolygonIdEdgeIndices32Bits.textureHeight;
         
         
         // end of chipmunk
@@ -664,9 +879,18 @@ class TrianglesBatchingLayer {
         //     }
         // }
 
-        state.numIndices = buffer.indices.length;
+        state.numIndices8Bits = buffer.indices8Bits.length;
+        state.numIndices16Bits = buffer.indices16Bits.length;
+        state.numIndices32Bits = buffer.indices32Bits.length;
 
-        state.numEdgeIndices = buffer.edgeIndices.length;
+        state.numEdgeIndices8Bits = buffer.edgeIndices8Bits.length;
+        state.numEdgeIndices16Bits = buffer.edgeIndices16Bits.length;
+        state.numEdgeIndices32Bits = buffer.edgeIndices32Bits.length;
+
+        ramStats.additionalTheoreticalOptimalIndicesSavings = Math.round (
+            (ramStats.sizeDataTextureIndices + ramStats.sizeDataTextureEdgeIndices) -
+            (ramStats.idealIndicesSize + ramStats.idealEdgeIndicesSize)
+        );
 
         console.log (JSON.stringify(ramStats, null, 4));
 
@@ -679,6 +903,7 @@ class TrianglesBatchingLayer {
         });
 
         console.log (`Total size ${totalRamSize} bytes (${(totalRamSize/1000/1000).toFixed(2)} MB)`);
+        console.log (`Avg bytes / triangle: ${(totalRamSize / ramStats.totalPolygons).toFixed(2)}`);
 
         let percentualRamStats = {};
 
@@ -712,7 +937,7 @@ class TrianglesBatchingLayer {
      * 
      * @returns The created texture and its height
      */
-    generateTextureForColorsAndFlags (gl, colors, pickColors, vertexBases) {
+    generateTextureForColorsAndFlags (gl, colors, pickColors, vertexBases, bytesPerIndex) {
         // The number of rows in the texture is the number of
         // objects in the layer.
 
@@ -723,7 +948,7 @@ class TrianglesBatchingLayer {
         // - col1: (packed Uint32 as RGBA) object pick color
         // - col2: (packed 4 bytes as RGBA) object flags
         // - col3: (packed 4 bytes as RGBA) object flags2
-        const textureWidth = 5;
+        const textureWidth = 6;
 
         const texArray = new Uint8Array (4 * textureWidth * textureHeight);
 
@@ -734,13 +959,13 @@ class TrianglesBatchingLayer {
             // object color
             texArray.set (
                 colors [i],
-                i * 20 + 0
+                i * 24 + 0
             );
 
             // object pick color
             texArray.set (
                 pickColors [i],
-                i * 20 + 4
+                i * 24 + 4
             );
 
             // object flags
@@ -748,7 +973,7 @@ class TrianglesBatchingLayer {
                 [
                     0, 0, 0, 0
                 ],
-                i * 20 + 8
+                i * 24 + 8
             );
 
             // object flags2
@@ -756,7 +981,7 @@ class TrianglesBatchingLayer {
                 [
                     0, 0, 0, 0
                 ],
-                i * 20 + 12
+                i * 24 + 12
             );
 
             // vertex base
@@ -767,7 +992,18 @@ class TrianglesBatchingLayer {
                     (vertexBases[i] >> 8) & 255,
                     (vertexBases[i]) & 255,
                 ],
-                i * 20 + 16
+                i * 24 + 16
+            );
+
+            // bytes per index
+            texArray.set (
+                [
+                    bytesPerIndex [i],
+                    0,
+                    0,
+                    0
+                ],
+                i * 24 + 20
             );
         }
 
@@ -890,10 +1126,141 @@ class TrianglesBatchingLayer {
         };
     }
 
+    // /**
+    //  * TODO: document
+    //  */
+    // generateTextureForIndices (gl, indices) {
+    //     const textureWidth = 512;
+    //     const textureHeight = Math.ceil (indices.length / 3 / textureWidth);
+
+    //     const texArraySize = textureWidth * textureHeight * 3;
+    //     const texArray = new Uint16Array (texArraySize);
+
+    //     ramStats.sizeDataTextureIndices +=texArray.byteLength;
+
+    //     texArray.fill(0);
+    //     texArray.set(indices, 0)
+
+    //     const texture = gl.createTexture();
+
+    //     gl.bindTexture (gl.TEXTURE_2D, texture);
+
+    //     gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGB16UI, textureWidth, textureHeight);
+
+    //     gl.texSubImage2D(
+    //         gl.TEXTURE_2D,
+    //         0,
+    //         0,
+    //         0,
+    //         textureWidth,
+    //         textureHeight,
+    //         gl.RGB_INTEGER,
+    //         gl.UNSIGNED_SHORT,
+    //         texArray,
+    //         0
+    //     );
+
+    //     // gl.texImage2D (
+    //     //     gl.TEXTURE_2D,
+    //     //     0,
+    //     //     gl.RGB16UI,
+    //     //     textureWidth,
+    //     //     textureHeight,
+    //     //     0,
+    //     //     gl.RGB_INTEGER,
+    //     //     gl.UNSIGNED_SHORT,
+    //     //     texArray
+    //     // );
+
+    //     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    //     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    //     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    //     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    //     gl.bindTexture(gl.TEXTURE_2D, null);
+
+    //     return {
+    //         texture,
+    //         textureHeight
+    //     };
+    // }
+
     /**
      * TODO: document
      */
-    generateTextureForIndices (gl, indices) {
+    generateTextureFor8BitIndices (gl, indices) {
+        if (indices.length == 0) {
+            return {
+                texture: null,
+                textureHeight: 0,
+            };
+        }
+
+        const textureWidth = 512;
+        const textureHeight = Math.ceil (indices.length / 3 / textureWidth);
+
+        const texArraySize = textureWidth * textureHeight * 3;
+        const texArray = new Uint8Array (texArraySize);
+
+        ramStats.sizeDataTextureIndices +=texArray.byteLength;
+
+        texArray.fill(0);
+        texArray.set(indices, 0)
+
+        const texture = gl.createTexture();
+
+        gl.bindTexture (gl.TEXTURE_2D, texture);
+
+        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGB8UI, textureWidth, textureHeight);
+
+        gl.texSubImage2D(
+            gl.TEXTURE_2D,
+            0,
+            0,
+            0,
+            textureWidth,
+            textureHeight,
+            gl.RGB_INTEGER,
+            gl.UNSIGNED_BYTE,
+            texArray,
+            0
+        );
+
+        // gl.texImage2D (
+        //     gl.TEXTURE_2D,
+        //     0,
+        //     gl.RGB16UI,
+        //     textureWidth,
+        //     textureHeight,
+        //     0,
+        //     gl.RGB_INTEGER,
+        //     gl.UNSIGNED_SHORT,
+        //     texArray
+        // );
+
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+        gl.bindTexture(gl.TEXTURE_2D, null);
+
+        return {
+            texture,
+            textureHeight
+        };
+    }
+
+    /**
+     * TODO: document
+     */
+    generateTextureFor16BitIndices (gl, indices) {
+        if (indices.length == 0) {
+            return {
+                texture: null,
+                textureHeight: 0,
+            };
+        }
         const textureWidth = 512;
         const textureHeight = Math.ceil (indices.length / 3 / textureWidth);
 
@@ -950,9 +1317,207 @@ class TrianglesBatchingLayer {
     }
 
     /**
+     * TODO: document
+     */
+    generateTextureFor32BitIndices (gl, indices) {
+        if (indices.length == 0) {
+            return {
+                texture: null,
+                textureHeight: 0,
+            };
+        }
+
+        const textureWidth = 512;
+        const textureHeight = Math.ceil (indices.length / 3 / textureWidth);
+
+        const texArraySize = textureWidth * textureHeight * 3;
+        const texArray = new Uint32Array (texArraySize);
+
+        ramStats.sizeDataTextureIndices +=texArray.byteLength;
+
+        texArray.fill(0);
+        texArray.set(indices, 0)
+
+        const texture = gl.createTexture();
+
+        gl.bindTexture (gl.TEXTURE_2D, texture);
+
+        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGB32UI, textureWidth, textureHeight);
+
+        gl.texSubImage2D(
+            gl.TEXTURE_2D,
+            0,
+            0,
+            0,
+            textureWidth,
+            textureHeight,
+            gl.RGB_INTEGER,
+            gl.UNSIGNED_INT,
+            texArray,
+            0
+        );
+
+        // gl.texImage2D (
+        //     gl.TEXTURE_2D,
+        //     0,
+        //     gl.RGB16UI,
+        //     textureWidth,
+        //     textureHeight,
+        //     0,
+        //     gl.RGB_INTEGER,
+        //     gl.UNSIGNED_SHORT,
+        //     texArray
+        // );
+
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+        gl.bindTexture(gl.TEXTURE_2D, null);
+
+        return {
+            texture,
+            textureHeight
+        };
+    }
+
+    // /**
+    //  * TODO: comment
+    //  */
+    // generateTextureForEdgeIndices (gl, edgeIndices) {
+    //     const textureWidth = 512;
+    //     const textureHeight = Math.ceil (edgeIndices.length / 2 / textureWidth);
+
+    //     const texArraySize = textureWidth * textureHeight * 2;
+    //     const texArray = new Uint16Array (texArraySize);
+
+    //     ramStats.sizeDataTextureEdgeIndices +=texArray.byteLength;
+
+    //     texArray.fill(0);
+    //     texArray.set(edgeIndices, 0)
+
+    //     const texture = gl.createTexture();
+
+    //     gl.bindTexture (gl.TEXTURE_2D, texture);
+
+    //     gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RG16UI, textureWidth, textureHeight);
+
+    //     gl.texSubImage2D(
+    //         gl.TEXTURE_2D,
+    //         0,
+    //         0,
+    //         0,
+    //         textureWidth,
+    //         textureHeight,
+    //         gl.RG_INTEGER,
+    //         gl.UNSIGNED_SHORT,
+    //         texArray,
+    //         0
+    //     );
+
+    //     // gl.texImage2D (
+    //     //     gl.TEXTURE_2D,
+    //     //     0,
+    //     //     gl.RGB16UI,
+    //     //     textureWidth,
+    //     //     textureHeight,
+    //     //     0,
+    //     //     gl.RGB_INTEGER,
+    //     //     gl.UNSIGNED_SHORT,
+    //     //     texArray
+    //     // );
+
+    //     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    //     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    //     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    //     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    //     gl.bindTexture(gl.TEXTURE_2D, null);
+
+    //     return {
+    //         texture,
+    //         textureHeight
+    //     };
+    // }
+
+    /**
      * TODO: comment
      */
-    generateTextureForEdgeIndices (gl, edgeIndices) {
+    generateTextureFor8BitsEdgeIndices (gl, edgeIndices) {
+        if (edgeIndices.length == 0) {
+            return {
+                texture: null,
+                textureHeight: 0,
+            };
+        }
+
+        const textureWidth = 512;
+        const textureHeight = Math.ceil (edgeIndices.length / 2 / textureWidth);
+
+        const texArraySize = textureWidth * textureHeight * 2;
+        const texArray = new Uint8Array (texArraySize);
+
+        ramStats.sizeDataTextureEdgeIndices +=texArray.byteLength;
+
+        texArray.fill(0);
+        texArray.set(edgeIndices, 0)
+
+        const texture = gl.createTexture();
+
+        gl.bindTexture (gl.TEXTURE_2D, texture);
+
+        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RG8UI, textureWidth, textureHeight);
+
+        gl.texSubImage2D(
+            gl.TEXTURE_2D,
+            0,
+            0,
+            0,
+            textureWidth,
+            textureHeight,
+            gl.RG_INTEGER,
+            gl.UNSIGNED_BYTE,
+            texArray,
+            0
+        );
+
+        // gl.texImage2D (
+        //     gl.TEXTURE_2D,
+        //     0,
+        //     gl.RG16UI,
+        //     textureWidth,
+        //     textureHeight,
+        //     0,
+        //     gl.RG_INTEGER,
+        //     gl.UNSIGNED_SHORT,
+        //     texArray
+        // );
+
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+        gl.bindTexture(gl.TEXTURE_2D, null);
+
+        return {
+            texture,
+            textureHeight
+        };
+    }
+
+    /**
+     * TODO: comment
+     */
+    generateTextureFor16BitsEdgeIndices (gl, edgeIndices) {
+        if (edgeIndices.length == 0) {
+            return {
+                texture: null,
+                textureHeight: 0,
+            };
+        }
+
         const textureWidth = 512;
         const textureHeight = Math.ceil (edgeIndices.length / 2 / textureWidth);
 
@@ -986,11 +1551,77 @@ class TrianglesBatchingLayer {
         // gl.texImage2D (
         //     gl.TEXTURE_2D,
         //     0,
-        //     gl.RGB16UI,
+        //     gl.RG16UI,
         //     textureWidth,
         //     textureHeight,
         //     0,
-        //     gl.RGB_INTEGER,
+        //     gl.RG_INTEGER,
+        //     gl.UNSIGNED_SHORT,
+        //     texArray
+        // );
+
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+        gl.bindTexture(gl.TEXTURE_2D, null);
+
+        return {
+            texture,
+            textureHeight
+        };
+    }
+
+    /**
+     * TODO: comment
+     */
+    generateTextureFor32BitsEdgeIndices (gl, edgeIndices) {
+        if (edgeIndices.length == 0) {
+            return {
+                texture: null,
+                textureHeight: 0,
+            };
+        }
+
+        const textureWidth = 512;
+        const textureHeight = Math.ceil (edgeIndices.length / 2 / textureWidth);
+
+        const texArraySize = textureWidth * textureHeight * 2;
+        const texArray = new Uint32Array (texArraySize);
+
+        ramStats.sizeDataTextureEdgeIndices +=texArray.byteLength;
+
+        texArray.fill(0);
+        texArray.set(edgeIndices, 0)
+
+        const texture = gl.createTexture();
+
+        gl.bindTexture (gl.TEXTURE_2D, texture);
+
+        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RG32UI, textureWidth, textureHeight);
+
+        gl.texSubImage2D(
+            gl.TEXTURE_2D,
+            0,
+            0,
+            0,
+            textureWidth,
+            textureHeight,
+            gl.RG_INTEGER,
+            gl.UNSIGNED_INT,
+            texArray,
+            0
+        );
+
+        // gl.texImage2D (
+        //     gl.TEXTURE_2D,
+        //     0,
+        //     gl.RG16UI,
+        //     textureWidth,
+        //     textureHeight,
+        //     0,
+        //     gl.RG_INTEGER,
         //     gl.UNSIGNED_SHORT,
         //     texArray
         // );
@@ -1081,6 +1712,12 @@ class TrianglesBatchingLayer {
     /**
      */
      generateTextureForPackedPortionIds (gl, portionIdsArray) {
+        if (portionIdsArray.length == 0) {
+            return {
+                texture: null,
+                textureHeight: 0,
+            };
+        }
         const lenArray = portionIdsArray.length;
         const textureWidth = 512;
         const textureHeight = Math.ceil (

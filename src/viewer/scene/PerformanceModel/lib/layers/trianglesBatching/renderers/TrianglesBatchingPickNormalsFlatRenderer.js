@@ -74,22 +74,6 @@ class TrianglesBatchingPickNormalsFlatRenderer {
         ); // chipmunk
 
         var rr3 = this._program.bindTexture(
-            this._uTexturePerPolygonIdNormals, 
-            {
-                bind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdNormals);
-                    return true;
-                },
-                unbind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, null);
-                }
-            },
-            3
-        ); // chipmunk
-
-        var rr4 = this._program.bindTexture(
             this._uTexturePerObjectIdColorsAndFlags,
             {
                 bind: function (unit) {
@@ -102,39 +86,7 @@ class TrianglesBatchingPickNormalsFlatRenderer {
                     gl.bindTexture(gl.TEXTURE_2D, null);
                 }
             },
-            4
-        ); // chipmunk
-
-        var rr5 = this._program.bindTexture(
-            this._uTexturePerPolygonIdPortionIds, 
-            {
-                bind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdPortionIds);
-                    return true;
-                },
-                unbind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, null);
-                }
-            },
-            5
-        ); // chipmunk
-
-        var rr6 = this._program.bindTexture(
-            this._uTexturePerPolygonIdIndices, 
-            {
-                bind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdIndices);
-                    return true;
-                },
-                unbind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, null);
-                }
-            },
-            6
+            3
         ); // chipmunk
 
         gl.uniform1i(this._uTexturePerObjectIdColorsAndFlagsHeight, state.texturePerObjectIdColorsAndFlagsHeight);
@@ -181,11 +133,114 @@ class TrianglesBatchingPickNormalsFlatRenderer {
         // TODO: Use drawElements count and offset to draw only one entity
         //=============================================================
 
-        if (this._aPackedVertexId) {
-            this._aPackedVertexId.bindArrayBuffer(state.indicesBuf);
+        if (state.numIndices8Bits > 0) {
+            var rr4 = this._program.bindTexture(
+                this._uTexturePerPolygonIdPortionIds, 
+                {
+                    bind: function (unit) {
+                        gl.activeTexture(gl["TEXTURE" + unit]);
+                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdPortionIds8Bits);
+                        return true;
+                    },
+                    unbind: function (unit) {
+                        gl.activeTexture(gl["TEXTURE" + unit]);
+                        gl.bindTexture(gl.TEXTURE_2D, null);
+                    }
+                },
+                4
+            ); // chipmunk
+    
+            var rr5 = this._program.bindTexture(
+                this._uTexturePerPolygonIdIndices, 
+                {
+                    bind: function (unit) {
+                        gl.activeTexture(gl["TEXTURE" + unit]);
+                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdIndices8Bits);
+                        return true;
+                    },
+                    unbind: function (unit) {
+                        gl.activeTexture(gl["TEXTURE" + unit]);
+                        gl.bindTexture(gl.TEXTURE_2D, null);
+                    }
+                },
+                5
+            ); // chipmunk
+
+            gl.drawArrays(gl.TRIANGLES, 0, state.numIndices8Bits);
         }
 
-        gl.drawArrays(gl.TRIANGLES, 0, state.numIndices);
+        if (state.numIndices16Bits > 0) {
+            var rr4 = this._program.bindTexture(
+                this._uTexturePerPolygonIdPortionIds, 
+                {
+                    bind: function (unit) {
+                        gl.activeTexture(gl["TEXTURE" + unit]);
+                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdPortionIds16Bits);
+                        return true;
+                    },
+                    unbind: function (unit) {
+                        gl.activeTexture(gl["TEXTURE" + unit]);
+                        gl.bindTexture(gl.TEXTURE_2D, null);
+                    }
+                },
+                4
+            ); // chipmunk
+    
+            var rr5 = this._program.bindTexture(
+                this._uTexturePerPolygonIdIndices, 
+                {
+                    bind: function (unit) {
+                        gl.activeTexture(gl["TEXTURE" + unit]);
+                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdIndices16Bits);
+                        return true;
+                    },
+                    unbind: function (unit) {
+                        gl.activeTexture(gl["TEXTURE" + unit]);
+                        gl.bindTexture(gl.TEXTURE_2D, null);
+                    }
+                },
+                5
+            ); // chipmunk
+
+            gl.drawArrays(gl.TRIANGLES, 0, state.numIndices16Bits);
+        }
+
+        if (state.numIndices32Bits > 0) {
+            var rr4 = this._program.bindTexture(
+                this._uTexturePerPolygonIdPortionIds, 
+                {
+                    bind: function (unit) {
+                        gl.activeTexture(gl["TEXTURE" + unit]);
+                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdPortionIds32Bits);
+                        return true;
+                    },
+                    unbind: function (unit) {
+                        gl.activeTexture(gl["TEXTURE" + unit]);
+                        gl.bindTexture(gl.TEXTURE_2D, null);
+                    }
+                },
+                4
+            ); // chipmunk
+    
+            var rr5 = this._program.bindTexture(
+                this._uTexturePerPolygonIdIndices, 
+                {
+                    bind: function (unit) {
+                        gl.activeTexture(gl["TEXTURE" + unit]);
+                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdIndices32Bits);
+                        return true;
+                    },
+                    unbind: function (unit) {
+                        gl.activeTexture(gl["TEXTURE" + unit]);
+                        gl.bindTexture(gl.TEXTURE_2D, null);
+                    }
+                },
+                5
+            ); // chipmunk
+
+            gl.drawArrays(gl.TRIANGLES, 0, state.numIndices32Bits);
+        }
+
 
         frameCtx.drawElements++;
     }

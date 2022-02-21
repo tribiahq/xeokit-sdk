@@ -29,8 +29,12 @@ class TrianglesBatchingBuffer {
         // this.flags = [];
         // this.flags2 = [];
         this.offsets = [];
-        this.indices = [];
-        this.edgeIndices = [];
+        this.indices8Bits = [];
+        this.indices16Bits = [];
+        this.indices32Bits = [];
+        this.edgeIndices8Bits = [];
+        this.edgeIndices16Bits = [];
+        this.edgeIndices32Bits = [];
         this.objectData = [];
     }
 }

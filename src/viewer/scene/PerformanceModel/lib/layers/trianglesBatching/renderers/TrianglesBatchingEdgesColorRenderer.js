@@ -77,22 +77,6 @@ class TrianglesBatchingEdgesColorRenderer {
         ); // chipmunk
 
         var rr3 = this._program.bindTexture(
-            this._uTexturePerPolygonIdNormals, 
-            {
-                bind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdNormals);
-                    return true;
-                },
-                unbind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, null);
-                }
-            },
-            3
-        ); // chipmunk
-
-        var rr4 = this._program.bindTexture(
             this._uTexturePerObjectIdColorsAndFlags,
             {
                 bind: function (unit) {
@@ -105,39 +89,7 @@ class TrianglesBatchingEdgesColorRenderer {
                     gl.bindTexture(gl.TEXTURE_2D, null);
                 }
             },
-            4
-        ); // chipmunk
-
-        var rr5 = this._program.bindTexture(
-            this._uTexturePerEdgeIdPortionIds,
-            {
-                bind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, state.texturePerEdgeIdPortionIds);
-                    return true;
-                },
-                unbind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, null);
-                }
-            },
-            5
-        ); // chipmunk
-
-        var rr6 = this._program.bindTexture(
-            this._uTexturePerPolygonIdEdgeIndices, 
-            {
-                bind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdEdgeIndices);
-                    return true;
-                },
-                unbind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, null);
-                }
-            },
-            6
+            3
         ); // chipmunk
 
         gl.uniform1i(this._uTexturePerObjectIdColorsAndFlagsHeight, state.texturePerObjectIdColorsAndFlagsHeight);
@@ -171,7 +123,115 @@ class TrianglesBatchingEdgesColorRenderer {
             }
         }
 
-        gl.drawArrays(gl.LINES, 0, state.numEdgeIndices);
+        if (state.numEdgeIndices8Bits > 0) {
+            var rr4 = this._program.bindTexture(
+                this._uTexturePerEdgeIdPortionIds, 
+                {
+                    bind: function (unit) {
+                        gl.activeTexture(gl["TEXTURE" + unit]);
+                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerEdgeIdPortionIds8Bits);
+                        return true;
+                    },
+                    unbind: function (unit) {
+                        gl.activeTexture(gl["TEXTURE" + unit]);
+                        gl.bindTexture(gl.TEXTURE_2D, null);
+                    }
+                },
+                4
+            ); // chipmunk
+    
+            var rr5 = this._program.bindTexture(
+                this._uTexturePerPolygonIdEdgeIndices, 
+                {
+                    bind: function (unit) {
+                        gl.activeTexture(gl["TEXTURE" + unit]);
+                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdEdgeIndices8Bits);
+                        return true;
+                    },
+                    unbind: function (unit) {
+                        gl.activeTexture(gl["TEXTURE" + unit]);
+                        gl.bindTexture(gl.TEXTURE_2D, null);
+                    }
+                },
+                5
+            ); // chipmunk
+
+            gl.drawArrays(gl.LINES, 0, state.numEdgeIndices8Bits);
+        }
+
+        if (state.numEdgeIndices16Bits > 0) {
+            var rr4 = this._program.bindTexture(
+                this._uTexturePerEdgeIdPortionIds, 
+                {
+                    bind: function (unit) {
+                        gl.activeTexture(gl["TEXTURE" + unit]);
+                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerEdgeIdPortionIds16Bits);
+                        return true;
+                    },
+                    unbind: function (unit) {
+                        gl.activeTexture(gl["TEXTURE" + unit]);
+                        gl.bindTexture(gl.TEXTURE_2D, null);
+                    }
+                },
+                4
+            ); // chipmunk
+    
+            var rr5 = this._program.bindTexture(
+                this._uTexturePerPolygonIdEdgeIndices, 
+                {
+                    bind: function (unit) {
+                        gl.activeTexture(gl["TEXTURE" + unit]);
+                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdEdgeIndices16Bits);
+                        return true;
+                    },
+                    unbind: function (unit) {
+                        gl.activeTexture(gl["TEXTURE" + unit]);
+                        gl.bindTexture(gl.TEXTURE_2D, null);
+                    }
+                },
+                5
+            ); // chipmunk
+
+            gl.drawArrays(gl.LINES, 0, state.numEdgeIndices16Bits);
+        }
+
+        if (state.numEdgeIndices32Bits > 0) {
+            var rr4 = this._program.bindTexture(
+                this._uTexturePerEdgeIdPortionIds, 
+                {
+                    bind: function (unit) {
+                        gl.activeTexture(gl["TEXTURE" + unit]);
+                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerEdgeIdPortionIds32Bits);
+                        return true;
+                    },
+                    unbind: function (unit) {
+                        gl.activeTexture(gl["TEXTURE" + unit]);
+                        gl.bindTexture(gl.TEXTURE_2D, null);
+                    }
+                },
+                4
+            ); // chipmunk
+    
+            var rr5 = this._program.bindTexture(
+                this._uTexturePerPolygonIdEdgeIndices, 
+                {
+                    bind: function (unit) {
+                        gl.activeTexture(gl["TEXTURE" + unit]);
+                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdEdgeIndices32Bits);
+                        return true;
+                    },
+                    unbind: function (unit) {
+                        gl.activeTexture(gl["TEXTURE" + unit]);
+                        gl.bindTexture(gl.TEXTURE_2D, null);
+                    }
+                },
+                5
+            ); // chipmunk
+
+            gl.drawArrays(gl.LINES, 0, state.numEdgeIndices32Bits);
+        }
+
+        frameCtx.drawElements++;
     }
 
     _allocate() {
