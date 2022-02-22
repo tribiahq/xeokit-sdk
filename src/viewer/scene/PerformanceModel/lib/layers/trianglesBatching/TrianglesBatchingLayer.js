@@ -11,9 +11,10 @@ import {TrianglesBatchingBuffer} from "./TrianglesBatchingBuffer.js";
 import {quantizePositions, transformAndOctEncodeNormals} from "../../compression.js";
 import { Float16Array, isFloat16Array, getFloat16, setFloat16, hfround, } from "./float16.js";
 import * as uniquifyPositions from "./calculateUniquePositions.js";
+import { rebucketPositions } from "./rebucketPositions.js";
 
 // 12-bits allowed for object ids
-const MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER = (1 << 12);
+const MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER = (1 << 11);
 
 // 2048 is max data texture height
 const MAX_DATA_TEXTURE_HEIGHT = (1 << 11);
@@ -32,6 +33,9 @@ let ramStats = {
     numberOfPortions: 0,
     numberOfLayers: 0,
     totalPolygons: 0,
+    totalPolygons8Bits: 0,
+    totalPolygons16Bits: 0,
+    totalPolygons32Bits: 0,
     cannotCreatePortion: {
         because10BitsObjectId: 0,
         becauseTextureSize: 0,
@@ -40,12 +44,6 @@ let ramStats = {
     overheadSizeAlignementEdgeIndices: 0, 
 };
 
-let _numTotalPolygons = 0;
-let _numTotalEdges = 0;
-let _numTotalEdges2 = 0;
-let _numTotalVertices = 0;
-let _numUniqueSmallVertices = 0;
-
 let _lastCanCreatePortion = {
     positions: null,
     indices: null,
@@ -53,6 +51,7 @@ let _lastCanCreatePortion = {
     uniquePositions: null,
     uniqueIndices: null,
     uniqueEdgeIndices: null,
+    buckets: null,
 };
 
 const tempMat4 = math.mat4();
@@ -72,6 +71,8 @@ const tempVec3e = math.vec3();
 const tempVec3f = math.vec3();
 const tempVec3g = math.vec3();
 
+let _numberOfLayers = 0;
+
 /**
  * @private
  */
@@ -90,6 +91,7 @@ class TrianglesBatchingLayer {
      */
     constructor(model, cfg) {
 
+        this._layerNumber = _numberOfLayers++;
         ramStats.numberOfLayers++;
 
         /**
@@ -164,7 +166,6 @@ class TrianglesBatchingLayer {
         this._objectDataPositionsMatrices = []; // chipmunk
         this._objectDataColors = [];
         this._objectDataPickColors = [];
-        this._objectBytesPerIndex = [];
 
         this._vertexBasesForObject = []; // chipmunk
 
@@ -174,6 +175,8 @@ class TrianglesBatchingLayer {
         this._portionIdForEdges8Bits = []; // chipmunk
         this._portionIdForEdges16Bits = []; // chipmunk
         this._portionIdForEdges32Bits = []; // chipmunk
+
+        this._portionIdFanOut = [];
 
         if (cfg.origin) {
             this._state.origin = math.vec3(cfg.origin);
@@ -204,26 +207,36 @@ class TrianglesBatchingLayer {
             throw "Already finalized";
         }
         
-        _lastCanCreatePortion.positions = positions;
-        _lastCanCreatePortion.indices = indices;
-        _lastCanCreatePortion.edgeIndices = edgeIndices;
+        let uniquePositions, uniqueIndices, uniqueEdgeIndices;
 
         [
-            _lastCanCreatePortion.uniquePositions,
-            _lastCanCreatePortion.uniqueIndices,
-            _lastCanCreatePortion.uniqueEdgeIndices,
+            uniquePositions,
+            uniqueIndices,
+            uniqueEdgeIndices,
         ] = uniquifyPositions.uniquifyPositions ({
             positions,
             indices,
             edgeIndices
         });
 
-        _numUniqueSmallVertices = _numUniqueSmallVertices + _lastCanCreatePortion.uniquePositions.length;
-        _numTotalVertices += positions.length;
-        _numTotalPolygons += indices.length / 3;
-        _numTotalEdges += edgeIndices.length / 2;
+        let numUniquePositions = uniquePositions.length / 3;
+        let numIndices = indices.length / 3;
 
-        if (!(this._numPortions < MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER))
+        let buckets = rebucketPositions (
+            {
+                positions: uniquePositions,
+                indices: uniqueIndices,
+                edgeIndices: uniqueEdgeIndices,
+            },
+            (numUniquePositions > (1<< 16)) ? 16 : ((numUniquePositions > (1<< 8)) ? 8 : 4),
+            // true
+        );
+
+        _lastCanCreatePortion.buckets = buckets;
+
+        const newPortions = buckets ? buckets.length : 1;
+
+        if ((this._numPortions + newPortions) > MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER)
         {
             ramStats.cannotCreatePortion.because10BitsObjectId++;
         }
@@ -234,15 +247,26 @@ class TrianglesBatchingLayer {
             this._numIndicesInLayer32Bits,
         ) ;
 
-        if (!(((this._numUniqueVerts + (_lastCanCreatePortion.uniquePositions.length / 3)) / 512) <= MAX_DATA_TEXTURE_HEIGHT &&
-            ((maxIndicesOfAnyBits + (_lastCanCreatePortion.uniqueIndices.length / 3)) / 512) <= MAX_DATA_TEXTURE_HEIGHT))
+        if (null !== buckets)
+        {
+            // debugger;
+
+            numUniquePositions = 0;
+
+            buckets.forEach(bucket => {
+                numUniquePositions += bucket.positions.length / 3;
+            });
+        }
+
+        if ((this._numUniqueVerts + numUniquePositions) > MAX_DATA_TEXTURE_HEIGHT * 512||
+            (maxIndicesOfAnyBits + numIndices) > MAX_DATA_TEXTURE_HEIGHT * 512)
         {
             ramStats.cannotCreatePortion.becauseTextureSize++;
         }
 
-        let retVal = this._numPortions < MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER && 
-                     ((this._numUniqueVerts + (_lastCanCreatePortion.uniquePositions.length / 3)) / 512) <= MAX_DATA_TEXTURE_HEIGHT &&
-                     ((maxIndicesOfAnyBits + (_lastCanCreatePortion.uniqueIndices.length / 3)) / 512) <= MAX_DATA_TEXTURE_HEIGHT;
+        let retVal = (this._numPortions + newPortions) <= MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER && 
+                     (this._numUniqueVerts + numUniquePositions) <= MAX_DATA_TEXTURE_HEIGHT * 512 &&
+                     (maxIndicesOfAnyBits + numIndices) / 512 <= MAX_DATA_TEXTURE_HEIGHT * 512;
 
         if (!retVal)
         {
@@ -278,11 +302,37 @@ class TrianglesBatchingLayer {
             throw "Already finalized";
         }
 
-        ramStats.numberOfPortions++;
+        if (cfg.indices == null)
+        {
+            return;
+        }
 
-        cfg.positions = _lastCanCreatePortion.uniquePositions || [];
-        cfg.indices = _lastCanCreatePortion.uniqueIndices;
-        cfg.edgeIndices = _lastCanCreatePortion.uniqueEdgeIndices;
+        let buckets = _lastCanCreatePortion.buckets;
+
+        if (buckets == null)
+        {
+            return;
+        }
+
+        let retVal = this._portionIdFanOut.length;
+
+        this._portionIdFanOut.push ([]);
+
+        buckets.forEach(bucket => {
+            cfg.positions = bucket.positions;
+            cfg.indices = bucket.indices;
+            cfg.edgeIndices = bucket.edgeIndices;
+
+            this._portionIdFanOut[retVal].push (
+                this._createPortion (cfg)
+            );
+        });
+
+        return retVal;
+    }
+
+    _createPortion(cfg) {
+        ramStats.numberOfPortions++;
 
         if ((cfg.positions.length / 3) > (1<<16))
         {
@@ -437,29 +487,6 @@ class TrianglesBatchingLayer {
 
         math.expandAABB3(this.aabb, worldAABB);
 
-        if (normals && normals.length > 0) {
-
-            if (this._preCompressed) {
-
-                for (let i = 0, len = normals.length; i < len; i++) {
-                    buffer.normals.push(normals[i]);
-                }
-
-            } else {
-
-                const worldNormalMatrix = tempMat4;
-
-                if (meshMatrix) {
-                    math.inverseMat4(math.transposeMat4(meshMatrix, tempMat4b), worldNormalMatrix); // Note: order of inverse and transpose doesn't matter
-
-                } else {
-                    math.identityMat4(worldNormalMatrix, worldNormalMatrix);
-                }
-
-                transformAndOctEncodeNormals(worldNormalMatrix, normals, normals.length, buffer.normals, buffer.normals.length);
-            }
-        }
-
         if (colors) {
             // start of chipmunk
             this._objectDataColors.push ([
@@ -468,9 +495,8 @@ class TrianglesBatchingLayer {
                 colors[2] * 255,
                 255
             ]);
-
-            this._colorsLength = (this._colorsLength || 0) + colors.length * 4;
-            // end of chipmunk
+        this._colorsLength = (this._colorsLength || 0) + colors.length * 4;
+        // end of chipmunk
 
         } else if (color) {
             const r = color[0]; // Color is pre-quantized by PerformanceModel
@@ -492,59 +518,14 @@ class TrianglesBatchingLayer {
 
         const numUniquePositions = positions.length / 3;
 
-        if (numUniquePositions <= 256) {
-            this._objectBytesPerIndex.push (1);        
-        } else if (numUniquePositions <= 65536) {
-            this._objectBytesPerIndex.push (2);
-        } else {
-            this._objectBytesPerIndex.push (4);
-        }
-
-        let fanOutImprovement = 0;
-
         if (indices) {
-            {
-                const idealBytesPerIndex = Math.log2(numUniquePositions) / 8;
-
-                ramStats.idealIndicesSize = (ramStats.idealIndicesSize || 0) + Math.max (
-                    idealBytesPerIndex * indices.length,
-                    1
-                );
-
-                let fanOutPositions = 0;
-
-                if (idealBytesPerIndex <= 1) {
-
-                } else if (idealBytesPerIndex < 2) {
-                    fanOutPositions = idealBytesPerIndex - 1;
-                } else {
-                    fanOutPositions = idealBytesPerIndex - 2;
-                }
-
-                fanOutImprovement -= Math.ceil (numUniquePositions * fanOutPositions) * 6;
-            }
-            {
-                if (numUniquePositions <= 256) {
-                    ramStats.edges8BitsSpace = (ramStats.edges8BitsSpace || 0) + indices.length;
-                } else if (numUniquePositions <= 65536) {
-                    ramStats.edges16BitsSpace = (ramStats.edges16BitsSpace || 0) + indices.length * 2;
-                    fanOutImprovement += indices.length;
-                } else {
-                    ramStats.edges32BitsSpace = (ramStats.edges32BitsSpace || 0) + indices.length * 4;
-                    fanOutImprovement += indices.length * 2;
-                }
-
-                ramStats.optimizedEdgesSpace = (ramStats.edges8BitsSpace || 0) + (ramStats.edges16BitsSpace || 0) + (ramStats.edges32BitsSpace || 0);
-                ramStats.nonOptimizedEdgesSpace = (ramStats.nonOptimizedEdgesSpace || 0) + indices.length * 2;
-                ramStats.optimizedEdgesSavings = (ramStats.nonOptimizedEdgesSpace - ramStats.optimizedEdgesSpace);
-            }
             let triangleNumber = 0;
             for (let i = 0, len = indices.length; i < len; i+=3) {
-                if (numUniquePositions <= 256) {
+                if (numUniquePositions <= (1<< 8)) {
                     buffer.indices8Bits.push(indices[i]);
                     buffer.indices8Bits.push(indices[i+1]);
                     buffer.indices8Bits.push(indices[i+2]);
-                } else if (numUniquePositions <= 65536) {
+                } else if (numUniquePositions <= (1<< 16)) {
                     buffer.indices16Bits.push(indices[i]);
                     buffer.indices16Bits.push(indices[i+1]);
                     buffer.indices16Bits.push(indices[i+2]);
@@ -557,9 +538,9 @@ class TrianglesBatchingLayer {
                 // buffer.indices.push(indices[i+1]);
 
                 if ((triangleNumber % INDICES_EDGE_INDICES_ALIGNEMENT_SIZE) == 0) {
-                    if (numUniquePositions <= 256) {
+                    if (numUniquePositions <= (1<< 8)) {
                         this._portionIdForIndices8Bits.push (this._numPortions);
-                    } else if (numUniquePositions <= 63356) {
+                    } else if (numUniquePositions <= (1<< 16)) {
                         this._portionIdForIndices16Bits.push (this._numPortions);
                     }
                     else {
@@ -569,11 +550,14 @@ class TrianglesBatchingLayer {
                 triangleNumber++;
             }
 
-            if (numUniquePositions <= 256) {
+            if (numUniquePositions <= (1<< 8)) {
+                ramStats.totalPolygons8Bits += indices.length / 3;
                 this._numIndicesInLayer8Bits += indices.length; // chupmunk
-            } else if (numUniquePositions <= 65536) {
+            } else if (numUniquePositions <= (1<< 16)) {
+                ramStats.totalPolygons16Bits += indices.length / 3;
                 this._numIndicesInLayer16Bits += indices.length; // chupmunk
             } else {
+                ramStats.totalPolygons32Bits += indices.length / 3;
                 this._numIndicesInLayer32Bits += indices.length; // chupmunk
             }
 
@@ -590,14 +574,12 @@ class TrianglesBatchingLayer {
                 );
             }
             {
-                if (numUniquePositions <= 256) {
+                if (numUniquePositions <= (1<< 8)) {
                     ramStats.edges8BitsSpace = (ramStats.edges8BitsSpace || 0) + edgeIndices.length;
-                } else if (numUniquePositions <= 65536) {
+                } else if (numUniquePositions <= (1<< 16)) {
                     ramStats.edges16BitsSpace = (ramStats.edges16BitsSpace || 0) + edgeIndices.length * 2;
-                    fanOutImprovement += edgeIndices.length;
                 } else {
                     ramStats.edges32BitsSpace = (ramStats.edges32BitsSpace || 0) + edgeIndices.length * 4;
-                    fanOutImprovement += edgeIndices.length * 2;
                 }
 
                 ramStats.optimizedEdgesSpace = (ramStats.edges8BitsSpace || 0) + (ramStats.edges16BitsSpace || 0) + (ramStats.edges32BitsSpace || 0);
@@ -607,10 +589,10 @@ class TrianglesBatchingLayer {
 
             let edgeNumber = 0;
             for (let i = 0, len = edgeIndices.length; i < len; i+=2) {
-                if (numUniquePositions <= 256) {
+                if (numUniquePositions <= (1<< 8)) {
                     buffer.edgeIndices8Bits.push(edgeIndices[i]);
                     buffer.edgeIndices8Bits.push(edgeIndices[i+1]);
-                } else if (numUniquePositions <= 65536) {
+                } else if (numUniquePositions <= (1<< 16)) {
                     buffer.edgeIndices16Bits.push(edgeIndices[i]);
                     buffer.edgeIndices16Bits.push(edgeIndices[i+1]);
                 } else {
@@ -620,9 +602,9 @@ class TrianglesBatchingLayer {
                 // buffer.edgeIndices.push(edgeIndices[i]);
                 // buffer.edgeIndices.push(edgeIndices[i+1]);
                 if ((edgeNumber % INDICES_EDGE_INDICES_ALIGNEMENT_SIZE) == 0) {
-                    if (numUniquePositions <= 256) {
+                    if (numUniquePositions <= (1<< 8)) {
                         this._portionIdForEdges8Bits.push (this._numPortions);
-                    } else if (numUniquePositions <= 63356) {
+                    } else if (numUniquePositions <= (1<< 16)) {
                         this._portionIdForEdges16Bits.push (this._numPortions);
                     }
                     else {
@@ -631,16 +613,14 @@ class TrianglesBatchingLayer {
                 }
                 edgeNumber++;
             }
-            if (numUniquePositions <= 256) {
+            if (numUniquePositions <= (1<< 8)) {
                 this._numEdgeIndicesInLayer8Bits += indices.length; // chupmunk
-            } else if (numUniquePositions <= 65536) {
+            } else if (numUniquePositions <= (1<< 16)) {
                 this._numEdgeIndicesInLayer16Bits += indices.length; // chupmunk
             } else {
                 this._numEdgeIndicesInLayer32Bits += indices.length; // chupmunk
             }
         }
-
-        ramStats._fanOutImprovement = (ramStats._fanOutImprovement || 0) + Math.max(fanOutImprovement, 0);
 
         // start of chipmunk
         this._objectDataPickColors.push (
@@ -648,13 +628,13 @@ class TrianglesBatchingLayer {
         );
         // end of chipmunk
 
-        if (scene.entityOffsetsEnabled) {
-            for (let i = 0; i < numVerts; i++) {
-                buffer.offsets.push(0);
-                buffer.offsets.push(0);
-                buffer.offsets.push(0);
-            }
-        }
+        // if (scene.entityOffsetsEnabled) {
+        //     for (let i = 0; i < numVerts; i++) {
+        //         buffer.offsets.push(0);
+        //         buffer.offsets.push(0);
+        //         buffer.offsets.push(0);
+        //     }
+        // }
 
         const portionId = this._portions.length;
 
@@ -681,12 +661,7 @@ class TrianglesBatchingLayer {
         this._numVerts += portion.numVerts;
 
         _lastCanCreatePortion = {
-            positions: null,
-            indices: null,
-            edgeIndices: null,
-            uniquePositions: null,
-            uniqueIndices: null,
-            uniqueEdgeIndices: null,
+            buckets: null,
         };
 
         return portionId;
@@ -697,7 +672,6 @@ class TrianglesBatchingLayer {
      * No more portions can then be created.
      */
     finalize() {
-
         if (this._finalized) {
             this.model.error("Already finalized");
             return;
@@ -707,21 +681,6 @@ class TrianglesBatchingLayer {
         const gl = this.model.scene.canvas.gl;
         const buffer = this._buffer;
 
-        // _numTotalEdges2 += buffer.edgeIndices.length / 2;
-
-        // start of chipmunk
-        // console.log (JSON.stringify({
-        //     'total-vertices-so-far': _numTotalVertices,
-        //     'unique-small-vertices-so-far': _numUniqueSmallVertices,
-        //     'total-polygons': [
-        //         _numTotalPolygons, buffer.indices.length / 3
-        //     ],
-        //     'total-edges': [
-        //         _numTotalEdges, _numTotalEdges2, buffer.edgeIndices.length / 2, this._numEdgeIndicesInLayer / 2
-        //     ],
-        //     'ratio': (_numUniqueSmallVertices / _numTotalVertices * 100).toFixed(2)
-        // }, null, 4));
-
         // Generate all the needed textures in the layer
 
         // a) colors and flags texture
@@ -729,8 +688,7 @@ class TrianglesBatchingLayer {
             gl,
             this._objectDataColors,
             this._objectDataPickColors,
-            this._vertexBasesForObject,
-            this._objectBytesPerIndex
+            this._vertexBasesForObject
         );
 
         state.texturePerObjectIdColorsAndFlags = colorsAndFlagsTexture.texture;
@@ -937,11 +895,16 @@ class TrianglesBatchingLayer {
      * 
      * @returns The created texture and its height
      */
-    generateTextureForColorsAndFlags (gl, colors, pickColors, vertexBases, bytesPerIndex) {
+    generateTextureForColorsAndFlags (gl, colors, pickColors, vertexBases) {
         // The number of rows in the texture is the number of
         // objects in the layer.
 
         const textureHeight = colors.length;
+
+        if (textureHeight == 0)
+        {
+            throw "texture height == 0";
+        }
 
         // 4 columns per texture row:
         // - col0: (RGBA) object color RGBA
@@ -993,17 +956,6 @@ class TrianglesBatchingLayer {
                     (vertexBases[i]) & 255,
                 ],
                 i * 24 + 16
-            );
-
-            // bytes per index
-            texArray.set (
-                [
-                    bytesPerIndex [i],
-                    0,
-                    0,
-                    0
-                ],
-                i * 24 + 20
             );
         }
 
@@ -1066,6 +1018,12 @@ class TrianglesBatchingLayer {
      */
     generateTextureForPositionsDecodeMatrices (gl, positionDecodeMatrices) {
         const textureHeight =  positionDecodeMatrices.length;
+
+        if (textureHeight == 0)
+        {
+            throw "texture height == 0";
+        }
+
         const textureWidth = 4;
 
         var texArray = new Float16Array(4 * textureWidth * textureHeight);
@@ -1199,6 +1157,11 @@ class TrianglesBatchingLayer {
         const textureWidth = 512;
         const textureHeight = Math.ceil (indices.length / 3 / textureWidth);
 
+        if (textureHeight == 0)
+        {
+            throw "texture height == 0";
+        }
+
         const texArraySize = textureWidth * textureHeight * 3;
         const texArray = new Uint8Array (texArraySize);
 
@@ -1263,6 +1226,11 @@ class TrianglesBatchingLayer {
         }
         const textureWidth = 512;
         const textureHeight = Math.ceil (indices.length / 3 / textureWidth);
+
+        if (textureHeight == 0)
+        {
+            throw "texture height == 0";
+        }
 
         const texArraySize = textureWidth * textureHeight * 3;
         const texArray = new Uint16Array (texArraySize);
@@ -1329,6 +1297,11 @@ class TrianglesBatchingLayer {
 
         const textureWidth = 512;
         const textureHeight = Math.ceil (indices.length / 3 / textureWidth);
+
+        if (textureHeight == 0)
+        {
+            throw "texture height == 0";
+        }
 
         const texArraySize = textureWidth * textureHeight * 3;
         const texArray = new Uint32Array (texArraySize);
@@ -1455,6 +1428,11 @@ class TrianglesBatchingLayer {
         const textureWidth = 512;
         const textureHeight = Math.ceil (edgeIndices.length / 2 / textureWidth);
 
+        if (textureHeight == 0)
+        {
+            throw "texture height == 0";
+        }
+
         const texArraySize = textureWidth * textureHeight * 2;
         const texArray = new Uint8Array (texArraySize);
 
@@ -1521,6 +1499,11 @@ class TrianglesBatchingLayer {
         const textureWidth = 512;
         const textureHeight = Math.ceil (edgeIndices.length / 2 / textureWidth);
 
+        if (textureHeight == 0)
+        {
+            throw "texture height == 0";
+        }
+
         const texArraySize = textureWidth * textureHeight * 2;
         const texArray = new Uint16Array (texArraySize);
 
@@ -1586,6 +1569,11 @@ class TrianglesBatchingLayer {
 
         const textureWidth = 512;
         const textureHeight = Math.ceil (edgeIndices.length / 2 / textureWidth);
+
+        if (textureHeight == 0)
+        {
+            throw "texture height == 0";
+        }
 
         const texArraySize = textureWidth * textureHeight * 2;
         const texArray = new Uint32Array (texArraySize);
@@ -1656,6 +1644,11 @@ class TrianglesBatchingLayer {
         const textureWidth = 512;
         const textureHeight =  Math.ceil (numVertices / textureWidth);
 
+        if (textureHeight == 0)
+        {
+            throw "texture height == 0";
+        }
+
         const texArraySize = textureWidth * textureHeight * 3;
         const texArray = new Uint16Array (texArraySize);
 
@@ -1724,6 +1717,11 @@ class TrianglesBatchingLayer {
             Math.ceil (lenArray / 2) / // every 2 items will use 3 bytes: 12-bits per item
             textureWidth
         );
+
+        if (textureHeight == 0)
+        {
+            throw "texture height == 0";
+        }
 
         const texArraySize = textureWidth * textureHeight * 3;
         const texArray = new Uint8Array (texArraySize);
@@ -1997,11 +1995,16 @@ class TrianglesBatchingLayer {
         this._setFlags(portionId, flags, transparent);
     }
 
-    _setFlags(portionId, flags, transparent, deferred = false) {
+    _setFlags(portionId, flags, deferred = false) {
+        (this._portionIdFanOut[portionId] || []).forEach (fanOut => {
+            this._fan_out_setFlags (fanOut, flags, deferred);
+        });
+    }
+
+    _fan_out_setFlags(portionId, flags, transparent, deferred = false) {
         if (!this._finalized) {
             throw "Not finalized";
         }
-
 
         const visible = !!(flags & ENTITY_FLAGS.VISIBLE);
         const xrayed = !!(flags & ENTITY_FLAGS.XRAYED);
@@ -2090,6 +2093,7 @@ class TrianglesBatchingLayer {
     }
 
     _setDeferredFlags() {
+        return;
         if (this._deferredFlagValues) {
             this._state.flagsBuf.setData(this._deferredFlagValues);
             this._deferredFlagValues = null;
@@ -2097,6 +2101,12 @@ class TrianglesBatchingLayer {
     }
 
     _setFlags2(portionId, flags, deferred = false) {
+        (this._portionIdFanOut[portionId] || []).forEach (fanOut => {
+            this._fan_out_setFlags2 (fanOut, flags, deferred);
+        });
+    }
+
+    _fan_out_setFlags2(portionId, flags, deferred = false) {
         if (!this._finalized) {
             throw "Not finalized";
         }
@@ -2128,6 +2138,7 @@ class TrianglesBatchingLayer {
     }
 
     _setDeferredFlags2() {
+        return;
         if (this._setDeferredFlag2Values) {
             this._state.flags2Buf.setData(this._setDeferredFlag2Values);
             this._setDeferredFlag2Values = null;

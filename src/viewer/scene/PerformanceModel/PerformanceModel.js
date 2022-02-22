@@ -2151,6 +2151,8 @@ class PerformanceModel extends Component {
                         });
                         this._layerList.push(layer);
                         this._currentBatchingLayers[primitive] = layer;
+
+                        layer.canCreatePortion(positions, indices, edgeIndices);
                     }
                     
                     // chipmunk TODO: handle the case when it's null
