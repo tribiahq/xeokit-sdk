@@ -228,7 +228,7 @@ class TrianglesBatchingLayer {
                 indices: uniqueIndices,
                 edgeIndices: uniqueEdgeIndices,
             },
-            (numUniquePositions > (1<< 16)) ? 16 : ((numUniquePositions > (1<< 8)) ? 8 : 4),
+            (numUniquePositions > (1<< 16)) ? 16 : 8,
             // true
         );
 
