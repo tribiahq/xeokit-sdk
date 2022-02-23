@@ -193,6 +193,11 @@ function rebucketPositions(mesh, bitsPerBucket, checkResult = false)
 
     const numPositions = positions.length / 3;
 
+    if (numPositions > ((1 << bitsPerBucket) * MAX_RE_BUCKET_FAN_OUT))
+    {
+        return [ mesh ];
+    }
+
     const bucketIndicesRemap = new Int32Array(numPositions);
     bucketIndicesRemap.fill(-1);
 
@@ -206,7 +211,7 @@ function rebucketPositions(mesh, bitsPerBucket, checkResult = false)
             positions: [],
             indices: [],
             edgeIndices: [],
-            maxNumPositions: (1 << bitsPerBucket) - 32,
+            maxNumPositions: (1 << bitsPerBucket) - bitsPerBucket,
             numPositions: 0,
             bucketNumber: buckets.length,
         };
