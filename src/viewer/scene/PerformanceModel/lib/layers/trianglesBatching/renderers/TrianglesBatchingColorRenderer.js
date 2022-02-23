@@ -422,11 +422,12 @@ class TrianglesBatchingColorRenderer {
         src.push("uniform mat4 projMatrix;");
         src.push("uniform mat4 viewNormalMatrix;");
         // src.push("uniform sampler2D uOcclusionTexture;"); // chipmunk
-        src.push("uniform sampler2D uTexturePerObjectIdPositionsDecodeMatrix;"); // chipmunk
-        src.push("uniform usampler2D uTexturePerObjectIdColorsAndFlags;"); // chipmunk
-        src.push("uniform usampler2D uTexturePerVertexIdCoordinates;"); // chipmunk
-        src.push("uniform usampler2D uTexturePerPolygonIdIndices;"); // chipmunk
-        src.push("uniform usampler2D uTexturePerPolygonIdPortionIds;"); // chipmunk
+
+        src.push("uniform mediump sampler2D uTexturePerObjectIdPositionsDecodeMatrix;"); // chipmunk
+        src.push("uniform lowp usampler2D uTexturePerObjectIdColorsAndFlags;"); // chipmunk
+        src.push("uniform mediump usampler2D uTexturePerVertexIdCoordinates;"); // chipmunk
+        src.push("uniform highp usampler2D uTexturePerPolygonIdIndices;"); // chipmunk
+        src.push("uniform mediump usampler2D uTexturePerPolygonIdPortionIds;"); // chipmunk
 
         if (scene.logarithmicDepthBufferEnabled) {
             src.push("uniform float logDepthBufFC;");

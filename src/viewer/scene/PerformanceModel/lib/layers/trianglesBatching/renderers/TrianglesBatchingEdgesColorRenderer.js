@@ -273,7 +273,6 @@ class TrianglesBatchingEdgesColorRenderer {
         this._uTexturePerObjectIdPositionsDecodeMatrix = "uTexturePerObjectIdPositionsDecodeMatrix"; // chipmunk
         this._uTexturePerObjectIdColorsAndFlags = "uTexturePerObjectIdColorsAndFlags"; // chipmunk
         this._uTexturePerVertexIdCoordinates = "uTexturePerVertexIdCoordinates"; // chipmunk
-        this._uTexturePerPolygonIdNormals = "uTexturePerPolygonIdNormals"; // chipmunk
         this._uTexturePerPolygonIdEdgeIndices = "uTexturePerPolygonIdEdgeIndices"; // chipmunk
         this._uTexturePerEdgeIdPortionIds = "uTexturePerEdgeIdPortionIds"; // chipmunk
     }
@@ -334,12 +333,11 @@ class TrianglesBatchingEdgesColorRenderer {
         src.push("uniform mat4 worldMatrix;");
         src.push("uniform mat4 viewMatrix;");
         src.push("uniform mat4 projMatrix;");
-        src.push("uniform sampler2D uTexturePerObjectIdPositionsDecodeMatrix;"); // chipmunk
-        src.push("uniform usampler2D uTexturePerObjectIdColorsAndFlags;"); // chipmunk
-        src.push("uniform usampler2D uTexturePerVertexIdCoordinates;"); // chipmunk
-        src.push("uniform usampler2D uTexturePerPolygonIdEdgeIndices;"); // chipmunk
-        src.push("uniform isampler2D uTexturePerPolygonIdNormals;"); // chipmunk
-        src.push("uniform usampler2D uTexturePerEdgeIdPortionIds;"); // chipmunk
+        src.push("uniform mediump sampler2D uTexturePerObjectIdPositionsDecodeMatrix;"); // chipmunk
+        src.push("uniform lowp usampler2D uTexturePerObjectIdColorsAndFlags;"); // chipmunk
+        src.push("uniform mediump usampler2D uTexturePerVertexIdCoordinates;"); // chipmunk
+        src.push("uniform highp usampler2D uTexturePerPolygonIdEdgeIndices;"); // chipmunk
+        src.push("uniform mediump usampler2D uTexturePerEdgeIdPortionIds;"); // chipmunk
 
         if (scene.logarithmicDepthBufferEnabled) {
             src.push("uniform float logDepthBufFC;");
@@ -360,9 +358,6 @@ class TrianglesBatchingEdgesColorRenderer {
 
         // constants
         src.push("int edgeIndex = gl_VertexID / 2;")
-
-        src.push("int h_normal_index = edgeIndex & 511;")
-        src.push("int v_normal_index = edgeIndex >> 9;")
 
         // get packed object-id
         src.push("int h_packed_object_id_index = ((edgeIndex >> 3) / 2) & 511;")
