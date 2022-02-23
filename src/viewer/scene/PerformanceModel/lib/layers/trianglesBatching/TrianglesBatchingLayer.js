@@ -14,7 +14,7 @@ import * as uniquifyPositions from "./calculateUniquePositions.js";
 import { rebucketPositions } from "./rebucketPositions.js";
 
 // 12-bits allowed for object ids
-const MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER = (1 << 11);
+const MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER = (1 << 12);
 
 // 2048 is max data texture height
 const MAX_DATA_TEXTURE_HEIGHT = (1 << 11);
