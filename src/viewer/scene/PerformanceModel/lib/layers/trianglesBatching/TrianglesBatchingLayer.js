@@ -876,6 +876,8 @@ class TrianglesBatchingLayer {
 
         this._buffer = null;
         this._finalized = true;
+
+        _lastCanCreatePortion.buckets = null;
     }
 
     /**
