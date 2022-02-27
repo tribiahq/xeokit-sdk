@@ -12,6 +12,7 @@ import {quantizePositions, transformAndOctEncodeNormals} from "../../compression
 import { Float16Array, isFloat16Array, getFloat16, setFloat16, hfround, } from "./float16.js";
 import * as uniquifyPositions from "./calculateUniquePositions.js";
 import { rebucketPositions } from "./rebucketPositions.js";
+import { createRTCViewMat } from "../../../../math/rtcCoords.js";
 
 // 12-bits allowed for object ids
 const MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER = (1 << 12);
@@ -73,6 +74,110 @@ const tempVec3g = math.vec3();
 
 let _numberOfLayers = 0;
 
+let textureCameraMatrices = {
+    lastOrigin: null,
+    differentOrigin: function (origin)
+    {
+        if (this.lastOrigin == null)
+        {
+            return true;
+        }
+
+        for (let i = 0; i < 3; i++)
+        {
+            if (origin[i] != this.lastOrigin[i])
+            {
+                return true;
+            }
+        }
+
+        return false;
+    },
+    lastCameraViewMatrix: null,
+    differentCameraViewMatrix: function (viewMatrix)
+    {
+        if (this.lastCameraViewMatrix == null)
+        {
+            return true;
+        }
+
+        for (let i = 0; i < 3; i++)
+        {
+            if (viewMatrix[i] != this.lastCameraViewMatrix [i])
+            {
+                return true;
+            }
+        }
+
+        return false;
+    },
+    lastCameraViewNormalMatrix: null,
+    differentCameraViewNormalMatrix: function (viewNormalMatrix)
+    {
+        if (this.lastCameraViewNormalMatrix == null)
+        {
+            return true;
+        }
+
+        for (let i = 0; i < 3; i++)
+        {
+            if (viewNormalMatrix[i] != this.lastCameraViewNormalMatrix [i])
+            {
+                return true;
+            }
+        }
+
+        return false;
+    },
+    ensureCameraMatrices: function (gl, origin, viewMatrix, viewNormalMatrix)
+    {
+        if (this.differentOrigin(origin) || 
+            this.differentCameraViewMatrix(viewMatrix))
+        {
+            this.lastOrigin = origin.slice ();
+            this.lastCameraViewMatrix = viewMatrix.slice ();
+            gl.texSubImage2D(
+                gl.TEXTURE_2D,
+                0,
+                0,
+                0,
+                4,
+                1,
+                gl.RGBA,
+                gl.FLOAT,
+                ((origin) ? createRTCViewMat(viewMatrix, origin) : viewMatrix).slice ()
+            );
+            // console.log ("different1");
+        }
+        else
+        {
+            // console.log ("equal1");
+        }
+
+        if (this.differentCameraViewNormalMatrix (viewNormalMatrix))
+        {
+            this.lastCameraViewNormalMatrix = viewNormalMatrix.slice ();
+            gl.texSubImage2D(
+                gl.TEXTURE_2D,
+                0,
+                0,
+                1,
+                4,
+                1,
+                gl.RGBA,
+                gl.FLOAT,
+                new Float32Array (viewNormalMatrix)
+            );
+            // console.log ("different2");
+        }
+        else
+        {
+            // console.log ("equal2");
+        }
+    },
+    texture: null
+};
+
 /**
  * @private
  */
@@ -126,6 +231,208 @@ class TrianglesBatchingLayer {
             texturePerObjectIdPositionsDecodeMatrixHeight: null,
             texturePerVertexIdCoordinates: null,
             texturePerVertexIdCoordinatesHeight: null,
+            texRR1: {
+                bind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerObjectIdPositionsDecodeMatrix);
+                    return true;
+                },
+                unbind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                }
+            },
+            texRR2: {
+                bind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerVertexIdCoordinates);
+                    return true;
+                },
+                unbind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                }
+            },
+            texRR3: {
+                bind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerObjectIdColorsAndFlags);
+                    return true;
+                },
+                unbind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                }
+            },
+            trianglesTexRR4_1: {
+                bind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerPolygonIdPortionIds8Bits);
+                    return true;
+                },
+                unbind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                }
+            },
+            trianglesTexRR5_1: {
+                bind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerPolygonIdIndices8Bits);
+                    return true;
+                },
+                unbind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                }
+            },
+            trianglesTexRR4_2: {
+                bind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerPolygonIdPortionIds16Bits);
+                    return true;
+                },
+                unbind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                }
+            },
+            trianglesTexRR5_2: {
+                bind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerPolygonIdIndices16Bits);
+                    return true;
+                },
+                unbind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                }
+            },
+            trianglesTexRR4_3: {
+                bind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerPolygonIdPortionIds32Bits);
+                    return true;
+                },
+                unbind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                }
+            },
+            trianglesTexRR5_3: {
+                bind: function (unit) {
+                    gl.activeTexture(gl["TEXTURE" + unit]);
+                    gl.bindTexture(gl.TEXTURE_2D, this.state.texturePerPolygonIdIndices32Bits);
+                    return true;
+                },
+                unbind: function (unit) {
+                    gl.activeTexture(gl["TEXTURE" + unit]);
+                    gl.bindTexture(gl.TEXTURE_2D, null);
+                }
+            },
+            edgesTexRR4_1: {
+                bind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerEdgeIdPortionIds8Bits);
+                    return true;
+                },
+                unbind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                }
+            },
+            edgesTexRR5_1: {
+                bind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerPolygonIdEdgeIndices8Bits);
+                    return true;
+                },
+                unbind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                }
+            },
+            edgesTexRR4_2: {
+                bind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerEdgeIdPortionIds16Bits);
+                    return true;
+                },
+                unbind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                }
+            },
+            edgesTexRR5_2: {
+                bind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerPolygonIdEdgeIndices16Bits);
+                    return true;
+                },
+                unbind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                }
+            },
+            edgesTexRR4_3: {
+                bind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerEdgeIdPortionIds32Bits);
+                    return true;
+                },
+                unbind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                }
+            },
+            edgesTexRR5_3: {
+                bind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerPolygonIdEdgeIndices32Bits);
+                    return true;
+                },
+                unbind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                }
+            },
+            texRR6: {
+                informCameraMatrices: function (origin, viewMatrix, viewNormalMatrix) {
+                    this._origin = origin;
+                    this._viewMatrix = viewMatrix;
+                    this._viewNormalMatrix = viewNormalMatrix;
+                },
+                bind: function (unit) {
+                    const texObject = this.state.textureCameraMatrices;
+    
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, texObject.texture);
+    
+                    texObject.ensureCameraMatrices (
+                        this.state.gl,
+                        this._origin,
+                        this._viewMatrix,
+                        this._viewNormalMatrix
+                    );
+    
+                    return true;
+                },
+                unbind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                }
+            },
+            texRR7: {
+                bind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.textureModelMatrices);
+                    return true;
+                },
+                unbind: function (unit) {
+                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                }
+            },
         });
 
         // These counts are used to avoid unnecessary render passes
@@ -681,6 +988,26 @@ class TrianglesBatchingLayer {
         const gl = this.model.scene.canvas.gl;
         const buffer = this._buffer;
 
+        state.gl = gl;
+        state.texRR1.state = state;
+        state.texRR2.state = state;
+        state.texRR3.state = state;
+        state.trianglesTexRR4_1.state = state;
+        state.trianglesTexRR5_1.state = state;
+        state.trianglesTexRR4_2.state = state;
+        state.trianglesTexRR5_2.state = state;
+        state.trianglesTexRR4_3.state = state;
+        state.trianglesTexRR5_3.state = state;
+        state.edgesTexRR4_1.state = state;
+        state.edgesTexRR5_1.state = state;
+        state.edgesTexRR4_2.state = state;
+        state.edgesTexRR5_2.state = state;
+        state.edgesTexRR4_3.state = state;
+        state.edgesTexRR5_3.state = state;
+        state.texRR3.state = state;
+        state.texRR6.state = state;
+        state.texRR7.state = state;
+
         // Generate all the needed textures in the layer
 
         // a) colors and flags texture
@@ -844,6 +1171,74 @@ class TrianglesBatchingLayer {
         state.numEdgeIndices8Bits = buffer.edgeIndices8Bits.length;
         state.numEdgeIndices16Bits = buffer.edgeIndices16Bits.length;
         state.numEdgeIndices32Bits = buffer.edgeIndices32Bits.length;
+
+        // Camera matrices texture
+        if (null == textureCameraMatrices.texture)
+        {
+            const textureWidth = 4;
+            const textureHeight = 2; // space for 2 matrices
+
+            const texture = gl.createTexture();
+
+            gl.bindTexture (gl.TEXTURE_2D, texture);
+            
+            gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, textureWidth, textureHeight);
+
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    
+            gl.bindTexture (gl.TEXTURE_2D, null);
+
+            textureCameraMatrices.texture = texture;
+        }
+
+        state.textureCameraMatrices = textureCameraMatrices;
+
+        // Model matrices texture
+        {
+            const textureWidth = 4;
+            const textureHeight = 2; // space for 2 matrices
+
+            const texture = gl.createTexture();
+
+            gl.bindTexture (gl.TEXTURE_2D, texture);
+            
+            gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, textureWidth, textureHeight);
+
+            gl.texSubImage2D(
+                gl.TEXTURE_2D,
+                0,
+                0, // x-offset
+                0, // y-offset (model world matrix)
+                4, // data width (4x4 values)
+                1, // data height (1 matrix)
+                gl.RGBA,
+                gl.FLOAT,
+                new Float32Array (this.model.worldMatrix.slice ())
+            );
+            gl.texSubImage2D(
+                gl.TEXTURE_2D,
+                0,
+                0, // x-offset
+                1, // y-offset (model normal matrix)
+                4, // data width (4x4 values)
+                1, // data height (1 matrix)
+                gl.RGBA,
+                gl.FLOAT,
+                new Float32Array (this.model.worldNormalMatrix.slice ())
+            );
+
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    
+            gl.bindTexture (gl.TEXTURE_2D, null);
+
+            state.textureModelMatrices = texture;
+        }
 
         ramStats.additionalTheoreticalOptimalIndicesSavings = Math.round (
             (ramStats.sizeDataTextureIndices + ramStats.sizeDataTextureEdgeIndices) -
@@ -2079,7 +2474,7 @@ class TrianglesBatchingLayer {
         tempUint8Array4 [2] = f2;
         tempUint8Array4 [3] = f3;
 
-        void gl.texSubImage2D(
+        gl.texSubImage2D(
             gl.TEXTURE_2D,
             0, // level
             2, // xoffset
@@ -2125,7 +2520,7 @@ class TrianglesBatchingLayer {
         tempUint8Array4 [2] = 1;
         tempUint8Array4 [3] = 2;
 
-        void gl.texSubImage2D(
+        gl.texSubImage2D(
             gl.TEXTURE_2D,
             0, // level
             3, // xoffset

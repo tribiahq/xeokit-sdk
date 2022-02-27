@@ -46,62 +46,44 @@ class TrianglesBatchingFlatColorRenderer {
             frameCtx.lastProgramId = this._program.id;
             this._bindProgram(frameCtx);
         }
-
-        var rr = this._program.bindTexture(
+        
+        var rr1 = this._program.bindTexture(
             this._uTexturePerObjectIdPositionsDecodeMatrix, 
-            {
-                bind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, state.texturePerObjectIdPositionsDecodeMatrix);
-                    return true;
-                },
-                unbind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, null);
-                }
-            },
+            state.texRR1,
             1
         ); // chipmunk
 
         var rr2 = this._program.bindTexture(
             this._uTexturePerVertexIdCoordinates, 
-            {
-                bind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, state.texturePerVertexIdCoordinates);
-                    return true;
-                },
-                unbind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, null);
-                }
-            },
+            state.texRR2,
             2
         ); // chipmunk
 
         var rr3 = this._program.bindTexture(
             this._uTexturePerObjectIdColorsAndFlags,
-            {
-                bind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, state.texturePerObjectIdColorsAndFlags);
-                    return true;
-                },
-                unbind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, null);
-                }
-            },
+            state.texRR3,
             3
         ); // chipmunk
 
-        gl.uniform1i(this._uTexturePerObjectIdColorsAndFlagsHeight, state.texturePerObjectIdColorsAndFlagsHeight);
+        state.texRR6.informCameraMatrices (
+            origin,
+            camera.viewMatrix,
+            camera.viewNormalMatrix
+        );
+        
+        var rr6 = this._program.bindTexture(
+            this._uTextureCameraMatrices,
+            state.texRR6,
+            6
+        ); // chipmunk
+
+        var rr7 = this._program.bindTexture(
+            this._uTextureModelMatrices,
+            state.texRR7,
+            7
+        ); // chipmunk
 
         gl.uniform1i(this._uRenderPass, renderPass);
-
-        gl.uniformMatrix4fv(this._uViewMatrix, false, (origin) ? createRTCViewMat(camera.viewMatrix, origin) : camera.viewMatrix);
-
-        gl.uniformMatrix4fv(this._uWorldMatrix, false, model.worldMatrix);
 
         const numSectionPlanes = scene._sectionPlanesState.sectionPlanes.length;
         if (numSectionPlanes > 0) {
@@ -128,33 +110,13 @@ class TrianglesBatchingFlatColorRenderer {
         if (state.numIndices8Bits > 0) {
             var rr4 = this._program.bindTexture(
                 this._uTexturePerPolygonIdPortionIds, 
-                {
-                    bind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdPortionIds8Bits);
-                        return true;
-                    },
-                    unbind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, null);
-                    }
-                },
+                state.trianglesTexRR4_1,
                 4
             ); // chipmunk
     
             var rr5 = this._program.bindTexture(
                 this._uTexturePerPolygonIdIndices, 
-                {
-                    bind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdIndices8Bits);
-                        return true;
-                    },
-                    unbind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, null);
-                    }
-                },
+                state.trianglesTexRR5_1,
                 5
             ); // chipmunk
 
@@ -164,75 +126,37 @@ class TrianglesBatchingFlatColorRenderer {
         if (state.numIndices16Bits > 0) {
             var rr4 = this._program.bindTexture(
                 this._uTexturePerPolygonIdPortionIds, 
-                {
-                    bind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdPortionIds16Bits);
-                        return true;
-                    },
-                    unbind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, null);
-                    }
-                },
+                state.trianglesTexRR4_2,
                 4
             ); // chipmunk
     
             var rr5 = this._program.bindTexture(
                 this._uTexturePerPolygonIdIndices, 
-                {
-                    bind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdIndices16Bits);
-                        return true;
-                    },
-                    unbind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, null);
-                    }
-                },
+                state.trianglesTexRR5_2,
                 5
             ); // chipmunk
 
             gl.drawArrays(gl.TRIANGLES, 0, state.numIndices16Bits);
         }
-
+        
         if (state.numIndices32Bits > 0) {
             var rr4 = this._program.bindTexture(
                 this._uTexturePerPolygonIdPortionIds, 
-                {
-                    bind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdPortionIds32Bits);
-                        return true;
-                    },
-                    unbind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, null);
-                    }
-                },
+                state.trianglesTexRR4_3,
                 4
             ); // chipmunk
     
             var rr5 = this._program.bindTexture(
                 this._uTexturePerPolygonIdIndices, 
-                {
-                    bind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdIndices32Bits);
-                        return true;
-                    },
-                    unbind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, null);
-                    }
-                },
+                state.trianglesTexRR5_3,
                 5
             ); // chipmunk
 
             gl.drawArrays(gl.TRIANGLES, 0, state.numIndices32Bits);
         }
 
+        // gl.flush ();
+        // gl.finish ();
 
         frameCtx.drawElements++;
     }
@@ -252,12 +176,7 @@ class TrianglesBatchingFlatColorRenderer {
 
         const program = this._program;
 
-        this._uTexturePerObjectIdColorsAndFlagsHeight = program.getLocation("texturePerObjectIdColorsAndFlagsHeight");
         this._uRenderPass = program.getLocation("renderPass");
-        this._uWorldMatrix = program.getLocation("worldMatrix");
-        this._uWorldNormalMatrix = program.getLocation("worldNormalMatrix");
-        this._uViewMatrix = program.getLocation("viewMatrix");
-        this._uViewNormalMatrix = program.getLocation("viewNormalMatrix");
         this._uProjMatrix = program.getLocation("projMatrix");
 
         this._uLightAmbient = program.getLocation("lightAmbient");
@@ -317,6 +236,8 @@ class TrianglesBatchingFlatColorRenderer {
         this._uTexturePerPolygonIdNormals = "uTexturePerPolygonIdNormals"; // chipmunk
         this._uTexturePerPolygonIdIndices = "uTexturePerPolygonIdIndices"; // chipmunk
         this._uTexturePerPolygonIdPortionIds = "uTexturePerPolygonIdPortionIds"; // chipmunk
+        this._uTextureCameraMatrices = "uTextureCameraMatrices"; // chipmunk
+        this._uTextureModelMatrices = "uTextureModelMatrices"; // chipmunk
     }
 
     _bindProgram(frameCtx) {
@@ -403,18 +324,11 @@ class TrianglesBatchingFlatColorRenderer {
         src.push("#endif");
 
         src.push("uniform int renderPass;");
-        src.push("uniform highp int texturePerObjectIdColorsAndFlagsHeight;");
-
-        src.push("in uvec3 packedVertexId;");
-
 
         if (scene.entityOffsetsEnabled) {
             src.push("in vec3 offset;");
         }
 
-        src.push("uniform mat4 worldMatrix;");
-
-        src.push("uniform mat4 viewMatrix;");
         src.push("uniform mat4 projMatrix;");
         // src.push("uniform sampler2D uOcclusionTexture;"); // chipmunk
         src.push("uniform mediump sampler2D uTexturePerObjectIdPositionsDecodeMatrix;"); // chipmunk
@@ -422,6 +336,8 @@ class TrianglesBatchingFlatColorRenderer {
         src.push("uniform mediump usampler2D uTexturePerVertexIdCoordinates;"); // chipmunk
         src.push("uniform highp usampler2D uTexturePerPolygonIdIndices;"); // chipmunk
         src.push("uniform mediump usampler2D uTexturePerPolygonIdPortionIds;"); // chipmunk
+        src.push("uniform highp sampler2D uTextureCameraMatrices;"); // chipmunk
+        src.push("uniform highp sampler2D uTextureModelMatrices;"); // chipmunk
 
         if (scene.logarithmicDepthBufferEnabled) {
             src.push("uniform float logDepthBufFC;");
@@ -442,11 +358,12 @@ class TrianglesBatchingFlatColorRenderer {
 
         src.push("void main(void) {");
 
+        // uniform matrices
+        src.push ("mat4 viewMatrix = mat4 (texelFetch (uTextureCameraMatrices, ivec2(0, 0), 0), texelFetch (uTextureCameraMatrices, ivec2(1, 0), 0), texelFetch (uTextureCameraMatrices, ivec2(2, 0), 0), texelFetch (uTextureCameraMatrices, ivec2(3, 0), 0));");
+        src.push ("mat4 worldMatrix = mat4 (texelFetch (uTextureModelMatrices, ivec2(0, 0), 0), texelFetch (uTextureModelMatrices, ivec2(1, 0), 0), texelFetch (uTextureModelMatrices, ivec2(2, 0), 0), texelFetch (uTextureModelMatrices, ivec2(3, 0), 0));");
+        
         // constants
         src.push("int polygonIndex = gl_VertexID / 3;")
-
-        src.push("int h_normal_index = polygonIndex & 511;")
-        src.push("int v_normal_index = polygonIndex >> 9;")
 
         // get packed object-id
         src.push("int h_packed_object_id_index = ((polygonIndex >> 3) / 2) & 511;")
@@ -480,18 +397,9 @@ class TrianglesBatchingFlatColorRenderer {
         src.push("uvec4 flags2 = texelFetch (uTexturePerObjectIdColorsAndFlags, ivec2(3, objectIndex), 0);"); // chipmunk
         
         // get position
-        src.push("vec3 position1 = vec3(texelFetch(uTexturePerVertexIdCoordinates, ivec2(indexPositionH.r, indexPositionV.r), 0));")
-        src.push("vec3 position2 = vec3(texelFetch(uTexturePerVertexIdCoordinates, ivec2(indexPositionH.g, indexPositionV.g), 0));")
-        src.push("vec3 position3 = vec3(texelFetch(uTexturePerVertexIdCoordinates, ivec2(indexPositionH.b, indexPositionV.b), 0));")
+        src.push("int vertexNumber = gl_VertexID % 3;")
 
-        // get normal
-        src.push("vec3 normal = -normalize(cross(position3 - position1, position2 - position1));");
-
-        src.push("int vertexNumber = gl_VertexID % 3;");
-        src.push("vec3 position;");
-        src.push("if (vertexNumber == 0) position = position1;");
-        src.push("else if (vertexNumber == 1) position = position2;");
-        src.push("else position = position3;");
+        src.push("vec3 position = vec3(texelFetch(uTexturePerVertexIdCoordinates, ivec2(indexPositionH[vertexNumber], indexPositionV[vertexNumber]), 0));")
 
         // get color
         src.push("uvec4 color = texelFetch (uTexturePerObjectIdColorsAndFlags, ivec2(0, objectIndex), 0);"); // chipmunk

@@ -43,61 +43,44 @@ class TrianglesBatchingEdgesColorRenderer {
             frameCtx.lastProgramId = this._program.id;
             this._bindProgram();
         }
-
-        var rr = this._program.bindTexture(
+        
+        var rr1 = this._program.bindTexture(
             this._uTexturePerObjectIdPositionsDecodeMatrix, 
-            {
-                bind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, state.texturePerObjectIdPositionsDecodeMatrix);
-                    return true;
-                },
-                unbind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, null);
-                }
-            },
+            state.texRR1,
             1
         ); // chipmunk
 
         var rr2 = this._program.bindTexture(
             this._uTexturePerVertexIdCoordinates, 
-            {
-                bind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, state.texturePerVertexIdCoordinates);
-                    return true;
-                },
-                unbind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, null);
-                }
-            },
+            state.texRR2,
             2
         ); // chipmunk
 
         var rr3 = this._program.bindTexture(
             this._uTexturePerObjectIdColorsAndFlags,
-            {
-                bind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, state.texturePerObjectIdColorsAndFlags);
-                    return true;
-                },
-                unbind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, null);
-                }
-            },
+            state.texRR3,
             3
         ); // chipmunk
 
-        gl.uniform1i(this._uTexturePerObjectIdColorsAndFlagsHeight, state.texturePerObjectIdColorsAndFlagsHeight);
+        state.texRR6.informCameraMatrices (
+            origin,
+            camera.viewMatrix,
+            camera.viewNormalMatrix
+        );
+        
+        var rr6 = this._program.bindTexture(
+            this._uTextureCameraMatrices,
+            state.texRR6,
+            6
+        ); // chipmunk
+
+        var rr7 = this._program.bindTexture(
+            this._uTextureModelMatrices,
+            state.texRR7,
+            7
+        ); // chipmunk
 
         gl.uniform1i(this._uRenderPass, renderPass);
-
-        gl.uniformMatrix4fv(this._uViewMatrix, false, (origin) ? createRTCViewMat(camera.viewMatrix, origin) : camera.viewMatrix);
-        gl.uniformMatrix4fv(this._uWorldMatrix, false, model.worldMatrix);
 
         const numSectionPlanes = scene._sectionPlanesState.sectionPlanes.length;
         if (numSectionPlanes > 0) {
@@ -126,33 +109,13 @@ class TrianglesBatchingEdgesColorRenderer {
         if (state.numEdgeIndices8Bits > 0) {
             var rr4 = this._program.bindTexture(
                 this._uTexturePerEdgeIdPortionIds, 
-                {
-                    bind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerEdgeIdPortionIds8Bits);
-                        return true;
-                    },
-                    unbind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, null);
-                    }
-                },
+                state.edgesTexRR4_1,
                 4
             ); // chipmunk
     
             var rr5 = this._program.bindTexture(
                 this._uTexturePerPolygonIdEdgeIndices, 
-                {
-                    bind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdEdgeIndices8Bits);
-                        return true;
-                    },
-                    unbind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, null);
-                    }
-                },
+                state.edgesTexRR5_1,
                 5
             ); // chipmunk
 
@@ -162,33 +125,13 @@ class TrianglesBatchingEdgesColorRenderer {
         if (state.numEdgeIndices16Bits > 0) {
             var rr4 = this._program.bindTexture(
                 this._uTexturePerEdgeIdPortionIds, 
-                {
-                    bind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerEdgeIdPortionIds16Bits);
-                        return true;
-                    },
-                    unbind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, null);
-                    }
-                },
+                state.edgesTexRR4_2,
                 4
             ); // chipmunk
     
             var rr5 = this._program.bindTexture(
                 this._uTexturePerPolygonIdEdgeIndices, 
-                {
-                    bind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdEdgeIndices16Bits);
-                        return true;
-                    },
-                    unbind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, null);
-                    }
-                },
+                state.edgesTexRR5_2,
                 5
             ); // chipmunk
 
@@ -198,33 +141,13 @@ class TrianglesBatchingEdgesColorRenderer {
         if (state.numEdgeIndices32Bits > 0) {
             var rr4 = this._program.bindTexture(
                 this._uTexturePerEdgeIdPortionIds, 
-                {
-                    bind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerEdgeIdPortionIds32Bits);
-                        return true;
-                    },
-                    unbind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, null);
-                    }
-                },
+                state.edgesTexRR4_3,
                 4
             ); // chipmunk
     
             var rr5 = this._program.bindTexture(
                 this._uTexturePerPolygonIdEdgeIndices, 
-                {
-                    bind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdEdgeIndices32Bits);
-                        return true;
-                    },
-                    unbind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, null);
-                    }
-                },
+                state.edgesTexRR5_3,
                 5
             ); // chipmunk
 
@@ -232,6 +155,10 @@ class TrianglesBatchingEdgesColorRenderer {
         }
 
         frameCtx.drawElements++;
+
+        // gl.flush ();
+        // gl.finish ();
+
     }
 
     _allocate() {
@@ -248,10 +175,7 @@ class TrianglesBatchingEdgesColorRenderer {
 
         const program = this._program;
 
-        this._uTexturePerObjectIdColorsAndFlagsHeight = program.getLocation("texturePerObjectIdColorsAndFlagsHeight");
         this._uRenderPass = program.getLocation("renderPass");
-        this._uWorldMatrix = program.getLocation("worldMatrix");
-        this._uViewMatrix = program.getLocation("viewMatrix");
 
         this._uProjMatrix = program.getLocation("projMatrix");
         this._uSectionPlanes = [];
@@ -275,6 +199,8 @@ class TrianglesBatchingEdgesColorRenderer {
         this._uTexturePerVertexIdCoordinates = "uTexturePerVertexIdCoordinates"; // chipmunk
         this._uTexturePerPolygonIdEdgeIndices = "uTexturePerPolygonIdEdgeIndices"; // chipmunk
         this._uTexturePerEdgeIdPortionIds = "uTexturePerEdgeIdPortionIds"; // chipmunk
+        this._uTextureCameraMatrices = "uTextureCameraMatrices"; // chipmunk
+        this._uTextureModelMatrices = "uTextureModelMatrices"; // chipmunk
     }
 
     _bindProgram() {
@@ -330,14 +256,14 @@ class TrianglesBatchingEdgesColorRenderer {
             src.push("in vec3 offset;");
         }
 
-        src.push("uniform mat4 worldMatrix;");
-        src.push("uniform mat4 viewMatrix;");
         src.push("uniform mat4 projMatrix;");
         src.push("uniform mediump sampler2D uTexturePerObjectIdPositionsDecodeMatrix;"); // chipmunk
         src.push("uniform lowp usampler2D uTexturePerObjectIdColorsAndFlags;"); // chipmunk
         src.push("uniform mediump usampler2D uTexturePerVertexIdCoordinates;"); // chipmunk
         src.push("uniform highp usampler2D uTexturePerPolygonIdEdgeIndices;"); // chipmunk
         src.push("uniform mediump usampler2D uTexturePerEdgeIdPortionIds;"); // chipmunk
+        src.push("uniform highp sampler2D uTextureCameraMatrices;"); // chipmunk
+        src.push("uniform highp sampler2D uTextureModelMatrices;"); // chipmunk
 
         if (scene.logarithmicDepthBufferEnabled) {
             src.push("uniform float logDepthBufFC;");
@@ -356,6 +282,10 @@ class TrianglesBatchingEdgesColorRenderer {
 
         src.push("void main(void) {");
 
+        // uniform matrices
+        src.push ("mat4 viewMatrix = mat4 (texelFetch (uTextureCameraMatrices, ivec2(0, 0), 0), texelFetch (uTextureCameraMatrices, ivec2(1, 0), 0), texelFetch (uTextureCameraMatrices, ivec2(2, 0), 0), texelFetch (uTextureCameraMatrices, ivec2(3, 0), 0));");
+        src.push ("mat4 worldMatrix = mat4 (texelFetch (uTextureModelMatrices, ivec2(0, 0), 0), texelFetch (uTextureModelMatrices, ivec2(1, 0), 0), texelFetch (uTextureModelMatrices, ivec2(2, 0), 0), texelFetch (uTextureModelMatrices, ivec2(3, 0), 0));");
+        
         // constants
         src.push("int edgeIndex = gl_VertexID / 2;")
 
