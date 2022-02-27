@@ -68,7 +68,8 @@ class TrianglesBatchingColorRenderer {
         state.texRR6.informCameraMatrices (
             origin,
             camera.viewMatrix,
-            camera.viewNormalMatrix
+            camera.viewNormalMatrix,
+            camera.project.matrix
         );
         
         var rr6 = this._program.bindTexture(
@@ -179,7 +180,7 @@ class TrianglesBatchingColorRenderer {
         const program = this._program;
 
         this._uRenderPass = program.getLocation("renderPass");
-        this._uProjMatrix = program.getLocation("projMatrix");
+        // this._uProjMatrix = program.getLocation("projMatrix");
 
         this._uLightAmbient = program.getLocation("lightAmbient");
         this._uLightColor = [];
@@ -252,7 +253,7 @@ class TrianglesBatchingColorRenderer {
 
         program.bind();
 
-        gl.uniformMatrix4fv(this._uProjMatrix, false, project.matrix)
+        // gl.uniformMatrix4fv(this._uProjMatrix, false, project.matrix)
 
         if (this._uLightAmbient) {
             gl.uniform4fv(this._uLightAmbient, scene._lightsState.getAmbientColorAndIntensity());
@@ -333,7 +334,7 @@ class TrianglesBatchingColorRenderer {
             src.push("in vec3 offset;");
         }
 
-        src.push("uniform mat4 projMatrix;");
+        // src.push("uniform mat4 projMatrix;");
         // src.push("uniform sampler2D uOcclusionTexture;"); // chipmunk
 
         src.push("uniform mediump sampler2D uTexturePerObjectIdPositionsDecodeMatrix;"); // chipmunk
@@ -384,12 +385,15 @@ class TrianglesBatchingColorRenderer {
 
         src.push("void main(void) {");
 
-        // uniform matrices
+        // camera matrices
         src.push ("mat4 viewMatrix = mat4 (texelFetch (uTextureCameraMatrices, ivec2(0, 0), 0), texelFetch (uTextureCameraMatrices, ivec2(1, 0), 0), texelFetch (uTextureCameraMatrices, ivec2(2, 0), 0), texelFetch (uTextureCameraMatrices, ivec2(3, 0), 0));");
         src.push ("mat4 viewNormalMatrix = mat4 (texelFetch (uTextureCameraMatrices, ivec2(0, 1), 0), texelFetch (uTextureCameraMatrices, ivec2(1, 1), 0), texelFetch (uTextureCameraMatrices, ivec2(2, 1), 0), texelFetch (uTextureCameraMatrices, ivec2(3, 1), 0));");
+        src.push ("mat4 projMatrix = mat4 (texelFetch (uTextureCameraMatrices, ivec2(0, 2), 0), texelFetch (uTextureCameraMatrices, ivec2(1, 2), 0), texelFetch (uTextureCameraMatrices, ivec2(2, 2), 0), texelFetch (uTextureCameraMatrices, ivec2(3, 2), 0));");
+
+        // model matrices
         src.push ("mat4 worldMatrix = mat4 (texelFetch (uTextureModelMatrices, ivec2(0, 0), 0), texelFetch (uTextureModelMatrices, ivec2(1, 0), 0), texelFetch (uTextureModelMatrices, ivec2(2, 0), 0), texelFetch (uTextureModelMatrices, ivec2(3, 0), 0));");
         src.push ("mat4 worldNormalMatrix = mat4 (texelFetch (uTextureModelMatrices, ivec2(0, 1), 0), texelFetch (uTextureModelMatrices, ivec2(1, 1), 0), texelFetch (uTextureModelMatrices, ivec2(2, 1), 0), texelFetch (uTextureModelMatrices, ivec2(3, 1), 0));");
-        
+
         // constants
         src.push("int polygonIndex = gl_VertexID / 3;")
 

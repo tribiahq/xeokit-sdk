@@ -129,7 +129,25 @@ let textureCameraMatrices = {
 
         return false;
     },
-    ensureCameraMatrices: function (gl, origin, viewMatrix, viewNormalMatrix)
+    lastCameraProjectMatrix: null,
+    differentCameraProjectMatrix: function (projectMatrix)
+    {
+        if (this.lastCameraProjectMatrix == null)
+        {
+            return true;
+        }
+
+        for (let i = 0; i < 16; i++)
+        {
+            if (projectMatrix[i] != this.lastCameraProjectMatrix [i])
+            {
+                return true;
+            }
+        }
+
+        return false;
+    },
+    ensureCameraMatrices: function (gl, origin, viewMatrix, viewNormalMatrix, projectMatrix)
     {
         if (this.differentOrigin(origin) || 
             this.differentCameraViewMatrix(viewMatrix))
@@ -173,6 +191,27 @@ let textureCameraMatrices = {
         else
         {
             // console.log ("equal2");
+        }
+
+        if (this.differentCameraProjectMatrix (projectMatrix))
+        {
+            this.lastCameraProjectMatrix = projectMatrix.slice ();
+            gl.texSubImage2D(
+                gl.TEXTURE_2D,
+                0,
+                0,
+                2,
+                4,
+                1,
+                gl.RGBA,
+                gl.FLOAT,
+                new Float32Array (projectMatrix)
+            );
+            // console.log ("different3");
+        }
+        else
+        {
+            // console.log ("equal3");
         }
     },
     texture: null
@@ -397,10 +436,11 @@ class TrianglesBatchingLayer {
                 }
             },
             texRR6: {
-                informCameraMatrices: function (origin, viewMatrix, viewNormalMatrix) {
+                informCameraMatrices: function (origin, viewMatrix, viewNormalMatrix, projectMatrix) {
                     this._origin = origin;
                     this._viewMatrix = viewMatrix;
                     this._viewNormalMatrix = viewNormalMatrix;
+                    this._projectMatrix = projectMatrix;
                 },
                 bind: function (unit) {
                     const texObject = this.state.textureCameraMatrices;
@@ -412,7 +452,8 @@ class TrianglesBatchingLayer {
                         this.state.gl,
                         this._origin,
                         this._viewMatrix,
-                        this._viewNormalMatrix
+                        this._viewNormalMatrix,
+                        this._projectMatrix
                     );
     
                     return true;
@@ -1176,7 +1217,7 @@ class TrianglesBatchingLayer {
         if (null == textureCameraMatrices.texture)
         {
             const textureWidth = 4;
-            const textureHeight = 2; // space for 2 matrices
+            const textureHeight = 3; // space for 3 matrices
 
             const texture = gl.createTexture();
 
