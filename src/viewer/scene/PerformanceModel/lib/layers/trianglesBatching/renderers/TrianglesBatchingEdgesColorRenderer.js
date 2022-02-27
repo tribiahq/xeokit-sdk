@@ -304,6 +304,18 @@ class TrianglesBatchingEdgesColorRenderer {
         src.push("  objectIndex = ((packedObjectId.g & 15) << 8) + packedObjectId.b;")
         src.push("}")
 
+        // get flags & flags2
+        src.push("uvec4 flags = texelFetch (uTexturePerObjectIdColorsAndFlags, ivec2(2, objectIndex), 0);"); // chipmunk
+        src.push("uvec4 flags2 = texelFetch (uTexturePerObjectIdColorsAndFlags, ivec2(3, objectIndex), 0);"); // chipmunk
+        
+        // flags.z = NOT_RENDERED | EDGES_COLOR_OPAQUE | EDGES_COLOR_TRANSPARENT | EDGES_HIGHLIGHTED | EDGES_XRAYED | EDGES_SELECTED
+        // renderPass = EDGES_COLOR_OPAQUE | EDGES_COLOR_TRANSPARENT
+        
+        src.push(`if (int(flags.z) != renderPass) {`);
+        src.push("   gl_Position = vec4(0.0, 0.0, 0.0, 0.0);"); // Cull vertex
+
+        src.push("} else {");
+
         // get vertex base
         src.push("ivec4 packedVertexBase = ivec4(texelFetch (uTexturePerObjectIdColorsAndFlags, ivec2(4, objectIndex), 0));"); // chipmunk
 
@@ -327,13 +339,8 @@ class TrianglesBatchingEdgesColorRenderer {
 
         // get color
         src.push("uvec4 color = texelFetch (uTexturePerObjectIdColorsAndFlags, ivec2(0, objectIndex), 0);"); // chipmunk
-        // flags.z = NOT_RENDERED | EDGES_COLOR_OPAQUE | EDGES_COLOR_TRANSPARENT | EDGES_HIGHLIGHTED | EDGES_XRAYED | EDGES_SELECTED
-        // renderPass = EDGES_COLOR_OPAQUE | EDGES_COLOR_TRANSPARENT
 
-        src.push(`if (int(flags.z) != renderPass) {`);
-        src.push("   gl_Position = vec4(0.0, 0.0, 0.0, 0.0);"); // Cull vertex
 
-        src.push("} else {");
 
         src.push("      vec4 worldPosition = worldMatrix * (positionsDecodeMatrix * vec4(position, 1.0)); ");
         if (scene.entityOffsetsEnabled) {
