@@ -2588,14 +2588,8 @@ class TrianglesBatchingLayer {
                     this._batchingRenderers.colorQualityRendererWithSAO.drawLayer(frameCtx, this, RENDER_PASSES.COLOR_OPAQUE);
                 }
             } else {
-                if (this._state.normalsBuf) {
-                    if (this._batchingRenderers.colorRendererWithSAO) {
-                        this._batchingRenderers.colorRendererWithSAO.drawLayer(frameCtx, this, RENDER_PASSES.COLOR_OPAQUE);
-                    }
-                } else {
-                    if (this._batchingRenderers.flatColorRendererWithSAO) {
-                        this._batchingRenderers.flatColorRendererWithSAO.drawLayer(frameCtx, this, RENDER_PASSES.COLOR_OPAQUE);
-                    }
+                if (this._batchingRenderers.colorRendererWithSAO) {
+                    this._batchingRenderers.colorRendererWithSAO.drawLayer(frameCtx, this, RENDER_PASSES.COLOR_OPAQUE);
                 }
             }
         } else {
@@ -2604,15 +2598,9 @@ class TrianglesBatchingLayer {
                     this._batchingRenderers.colorQualityRenderer.drawLayer(frameCtx, this, RENDER_PASSES.COLOR_OPAQUE);
                 }
             } else {
-                // if (this._state.normalsBuf) {
-                    if (this._batchingRenderers.colorRenderer) {
-                        this._batchingRenderers.colorRenderer.drawLayer(frameCtx, this, RENDER_PASSES.COLOR_OPAQUE);
-                    }
-                // } else {
-                //     if (this._batchingRenderers.flatColorRenderer) {
-                //         this._batchingRenderers.flatColorRenderer.drawLayer(frameCtx, this, RENDER_PASSES.COLOR_OPAQUE);
-                //     }
-                // }
+                if (this._batchingRenderers.colorRenderer) {
+                    this._batchingRenderers.colorRenderer.drawLayer(frameCtx, this, RENDER_PASSES.COLOR_OPAQUE);
+                }
             }
         }
     }
@@ -2640,14 +2628,8 @@ class TrianglesBatchingLayer {
                 this._batchingRenderers.colorQualityRenderer.drawLayer(frameCtx, this, RENDER_PASSES.COLOR_TRANSPARENT);
             }
         } else {
-            if (this._state.normalsBuf) {
-                if (this._batchingRenderers.colorRenderer) {
-                    this._batchingRenderers.colorRenderer.drawLayer(frameCtx, this, RENDER_PASSES.COLOR_TRANSPARENT);
-                }
-            } else {
-                if (this._batchingRenderers.flatColorRenderer) {
-                    this._batchingRenderers.flatColorRenderer.drawLayer(frameCtx, this, RENDER_PASSES.COLOR_TRANSPARENT);
-                }
+            if (this._batchingRenderers.colorRenderer) {
+                this._batchingRenderers.colorRenderer.drawLayer(frameCtx, this, RENDER_PASSES.COLOR_TRANSPARENT);
             }
         }
     }

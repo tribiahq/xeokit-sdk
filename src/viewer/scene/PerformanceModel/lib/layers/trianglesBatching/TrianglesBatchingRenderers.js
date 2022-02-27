@@ -1,5 +1,4 @@
 import {TrianglesBatchingColorRenderer} from "./renderers/TrianglesBatchingColorRenderer.js";
-import {TrianglesBatchingFlatColorRenderer} from "./renderers/TrianglesBatchingFlatColorRenderer.js";
 import {TrianglesBatchingSilhouetteRenderer} from "./renderers/TrianglesBatchingSilhouetteRenderer.js";
 import {TrianglesBatchingEdgesRenderer} from "./renderers/TrianglesBatchingEdgesRenderer.js";
 import {TrianglesBatchingEdgesColorRenderer} from "./renderers/TrianglesBatchingEdgesColorRenderer.js";
@@ -105,20 +104,6 @@ class TrianglesBatchingRenderers {
             this._colorRendererWithSAO = new TrianglesBatchingColorRenderer(this._scene, true);
         }
         return this._colorRendererWithSAO;
-    }
-
-    get flatColorRenderer() {
-        if (!this._flatColorRenderer) {
-            this._flatColorRenderer = new TrianglesBatchingFlatColorRenderer(this._scene, false);
-        }
-        return this._flatColorRenderer;
-    }
-
-    get flatColorRendererWithSAO() {
-        if (!this._flatColorRendererWithSAO) {
-            this._flatColorRendererWithSAO = new TrianglesBatchingFlatColorRenderer(this._scene, true);
-        }
-        return this._flatColorRendererWithSAO;
     }
 
     get colorQualityRenderer() {
