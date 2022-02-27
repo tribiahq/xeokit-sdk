@@ -101,7 +101,7 @@ let textureCameraMatrices = {
             return true;
         }
 
-        for (let i = 0; i < 3; i++)
+        for (let i = 0; i < 16; i++)
         {
             if (viewMatrix[i] != this.lastCameraViewMatrix [i])
             {
@@ -119,7 +119,7 @@ let textureCameraMatrices = {
             return true;
         }
 
-        for (let i = 0; i < 3; i++)
+        for (let i = 0; i < 16; i++)
         {
             if (viewNormalMatrix[i] != this.lastCameraViewNormalMatrix [i])
             {
