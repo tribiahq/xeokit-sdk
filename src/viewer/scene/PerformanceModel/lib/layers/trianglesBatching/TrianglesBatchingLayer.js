@@ -238,8 +238,8 @@ class TrianglesBatchingLayer {
                     return true;
                 },
                 unbind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
                 }
             },
             texRR2: {
@@ -249,8 +249,8 @@ class TrianglesBatchingLayer {
                     return true;
                 },
                 unbind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
                 }
             },
             texRR3: {
@@ -260,8 +260,8 @@ class TrianglesBatchingLayer {
                     return true;
                 },
                 unbind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
                 }
             },
             trianglesTexRR4_1: {
@@ -271,8 +271,8 @@ class TrianglesBatchingLayer {
                     return true;
                 },
                 unbind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
                 }
             },
             trianglesTexRR5_1: {
@@ -282,8 +282,8 @@ class TrianglesBatchingLayer {
                     return true;
                 },
                 unbind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
                 }
             },
             trianglesTexRR4_2: {
@@ -293,8 +293,8 @@ class TrianglesBatchingLayer {
                     return true;
                 },
                 unbind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
                 }
             },
             trianglesTexRR5_2: {
@@ -304,8 +304,8 @@ class TrianglesBatchingLayer {
                     return true;
                 },
                 unbind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
                 }
             },
             trianglesTexRR4_3: {
@@ -315,8 +315,8 @@ class TrianglesBatchingLayer {
                     return true;
                 },
                 unbind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
                 }
             },
             trianglesTexRR5_3: {
@@ -326,8 +326,8 @@ class TrianglesBatchingLayer {
                     return true;
                 },
                 unbind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, null);
+                    // gl.activeTexture(gl["TEXTURE" + unit]);
+                    // gl.bindTexture(gl.TEXTURE_2D, null);
                 }
             },
             edgesTexRR4_1: {
@@ -337,8 +337,8 @@ class TrianglesBatchingLayer {
                     return true;
                 },
                 unbind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
                 }
             },
             edgesTexRR5_1: {
@@ -348,8 +348,8 @@ class TrianglesBatchingLayer {
                     return true;
                 },
                 unbind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
                 }
             },
             edgesTexRR4_2: {
@@ -359,8 +359,8 @@ class TrianglesBatchingLayer {
                     return true;
                 },
                 unbind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
                 }
             },
             edgesTexRR5_2: {
@@ -370,8 +370,8 @@ class TrianglesBatchingLayer {
                     return true;
                 },
                 unbind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
                 }
             },
             edgesTexRR4_3: {
@@ -381,8 +381,8 @@ class TrianglesBatchingLayer {
                     return true;
                 },
                 unbind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
                 }
             },
             edgesTexRR5_3: {
@@ -392,8 +392,8 @@ class TrianglesBatchingLayer {
                     return true;
                 },
                 unbind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
                 }
             },
             texRR6: {
@@ -418,8 +418,8 @@ class TrianglesBatchingLayer {
                     return true;
                 },
                 unbind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
                 }
             },
             texRR7: {
@@ -429,8 +429,8 @@ class TrianglesBatchingLayer {
                     return true;
                 },
                 unbind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
                 }
             },
         });
