@@ -177,9 +177,7 @@ class TrianglesBatchingEdgesColorRenderer {
         const program = this._program;
 
         this._uRenderPass = program.getLocation("renderPass");
-        // this._uProjMatrix = program.getLocation("projMatrix");
-
-        this._uProjMatrix = program.getLocation("projMatrix");
+        
         this._uSectionPlanes = [];
 
         for (let i = 0, len = scene._sectionPlanesState.sectionPlanes.length; i < len; i++) {
@@ -312,8 +310,8 @@ class TrianglesBatchingEdgesColorRenderer {
         // renderPass = EDGES_COLOR_OPAQUE | EDGES_COLOR_TRANSPARENT
         
         src.push(`if (int(flags.z) != renderPass) {`);
-        src.push("   gl_Position = vec4(0.0, 0.0, 0.0, 0.0);"); // Cull vertex
-
+        src.push("   gl_Position = vec4(3.0, 3.0, 3.0, 1.0);"); // Cull vertex
+        src.push("   return;"); // Cull vertex
         src.push("} else {");
 
         // get vertex base

@@ -180,7 +180,6 @@ class TrianglesBatchingColorRenderer {
         const program = this._program;
 
         this._uRenderPass = program.getLocation("renderPass");
-        // this._uProjMatrix = program.getLocation("projMatrix");
 
         this._uLightAmbient = program.getLocation("lightAmbient");
         this._uLightColor = [];
@@ -252,8 +251,6 @@ class TrianglesBatchingColorRenderer {
         const project = scene.camera.project;
 
         program.bind();
-
-        // gl.uniformMatrix4fv(this._uProjMatrix, false, project.matrix)
 
         if (this._uLightAmbient) {
             gl.uniform4fv(this._uLightAmbient, scene._lightsState.getAmbientColorAndIntensity());
@@ -334,7 +331,6 @@ class TrianglesBatchingColorRenderer {
             src.push("in vec3 offset;");
         }
 
-        // src.push("uniform mat4 projMatrix;");
         // src.push("uniform sampler2D uOcclusionTexture;"); // chipmunk
 
         src.push("uniform mediump sampler2D uTexturePerObjectIdPositionsDecodeMatrix;"); // chipmunk
@@ -418,8 +414,8 @@ class TrianglesBatchingColorRenderer {
         // renderPass = COLOR_OPAQUE
 
         src.push(`if (int(flags.x) != renderPass) {`);
-        src.push("   gl_Position = vec4(0.0, 0.0, 0.0, 0.0);"); // Cull vertex
-
+        src.push("   gl_Position = vec4(3.0, 3.0, 3.0, 1.0);"); // Cull vertex
+        src.push("   return;"); // Cull vertex
         src.push("} else {");
 
         // get vertex base
@@ -445,18 +441,18 @@ class TrianglesBatchingColorRenderer {
         src.push("uvec4 color = texelFetch (uTexturePerObjectIdColorsAndFlags, ivec2(0, objectIndex), 0);"); // chipmunk
         
         // get normal
-        src.push("vec3 normal = -normalize(cross(positions[2] - positions[0], positions[1] - positions[0]));");
+        src.push("vec3 normal = normalize(cross(positions[1] - positions[0], positions[2] - positions[0]));");
 
         src.push("vec3 position = positions[gl_VertexID % 3];");
         
         src.push("vec4 worldPosition = worldMatrix * (positionsDecodeMatrix * vec4(position, 1.0)); ");
+
         if (scene.entityOffsetsEnabled) {
             src.push("worldPosition.xyz = worldPosition.xyz + offset;");
         }
 
         src.push("vec4 viewPosition = viewMatrix * worldPosition; ");
 
-        // src.push("vec4 worldNormal =  worldNormalMatrix * vec4(octDecode(normal.xy), 0.0); ");
         src.push("vec4 worldNormal =  worldNormalMatrix * vec4(normal, 1); ");
 
         src.push("vec3 viewNormal = normalize((viewNormalMatrix * worldNormal).xyz);");
