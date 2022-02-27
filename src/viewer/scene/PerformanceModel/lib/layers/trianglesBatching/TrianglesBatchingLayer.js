@@ -1238,6 +1238,7 @@ class TrianglesBatchingLayer {
         state.textureCameraMatrices = textureCameraMatrices;
 
         // Model matrices texture
+        if (!this.model._modelMatricesTexture)
         {
             const textureWidth = 4;
             const textureHeight = 2; // space for 2 matrices
@@ -1278,8 +1279,10 @@ class TrianglesBatchingLayer {
     
             gl.bindTexture (gl.TEXTURE_2D, null);
 
-            state.textureModelMatrices = texture;
+            this.model._modelMatricesTexture = texture;
         }
+
+        state.textureModelMatrices = this.model._modelMatricesTexture;
 
         ramStats.additionalTheoreticalOptimalIndicesSavings = Math.round (
             (ramStats.sizeDataTextureIndices + ramStats.sizeDataTextureEdgeIndices) -
