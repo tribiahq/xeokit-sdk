@@ -176,6 +176,8 @@ class Canvas extends Component {
 
             tickCount++; // chipmunk
 
+            self._canvasSizeChanged = false;
+
             if (self.optimizeResizeDetection)
             {
                 if (tickCount < 60) // chipmunk
@@ -204,6 +206,8 @@ class Canvas extends Component {
 
             if (newResolutionScale || newWindowSize || newCanvasSize || newCanvasPos || newParent) {
 
+                self._canvasSizeChanged = true;
+                
                 this._spinner._adjustPosition();
 
                 if (newResolutionScale || newCanvasSize || newCanvasPos) {
@@ -492,13 +496,13 @@ class Canvas extends Component {
                 originalBindTexture.call (this, arg1, arg2);
             }
 
-            setInterval (
-                () => {
-                    console.log (`${avoidedRebinds} avoided texture binds/sec`);
-                    avoidedRebinds = 0;
-                },
-                1000
-            );
+            // setInterval (
+            //     () => {
+            //         console.log (`${avoidedRebinds} avoided texture binds/sec`);
+            //         avoidedRebinds = 0;
+            //     },
+            //     1000
+            // );
         }
         if (this.gl) {
             // Setup extension (if necessary) and hints for fragment shader derivative functions
