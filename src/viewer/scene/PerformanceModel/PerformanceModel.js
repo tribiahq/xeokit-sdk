@@ -19,6 +19,8 @@ import {utils} from "../utils.js";
 import {RenderFlags} from "../webgl/RenderFlags.js";
 import {worldToRTCPositions} from "../math/rtcCoords.js";
 
+import {clusterizeV2} from "./cluster-helper.js";
+
 const instancedArraysSupported = WEBGL_INFO.SUPPORTED_EXTENSIONS["ANGLE_instanced_arrays"];
 
 const tempVec3a = math.vec3();
@@ -1095,6 +1097,9 @@ class PerformanceModel extends Component {
         this._onCameraViewMatrix = this.scene.camera.on("matrix", () => {
             this._viewMatrixDirty = true;
         });
+
+        this._meshQueue = [];
+        this._entityQueue = [];
     }
 
     //------------------------------------------------------------------------------------------------------------------
@@ -1923,6 +1928,12 @@ class PerformanceModel extends Component {
      * @param {Number} [cfg.opacity=1] Opacity in range ````[0..1]````.
      */
     createMesh(cfg) {
+        cfg.color = cfg.color.slice ();
+        cfg.positionsDecodeMatrix = cfg.positionsDecodeMatrix.slice ();
+        this._meshQueue.push (cfg);
+    }
+
+    _createMesh(cfg, forceFinalize) {
 
         let id = cfg.id;
         if (id === undefined || id === null) {
@@ -2132,7 +2143,7 @@ class PerformanceModel extends Component {
                     }
                     
                     if (layer) {
-                        if (!layer.canCreatePortion(positions, indices, edgeIndices)) {
+                        if (!layer.canCreatePortion(positions, indices, edgeIndices) || forceFinalize) {
                             layer.finalize();
                             delete this._currentBatchingLayers[primitive];
                             layer = null;
@@ -2300,6 +2311,10 @@ class PerformanceModel extends Component {
      * @returns {Entity}
      */
     createEntity(cfg) {
+        this._entityQueue.push (cfg);
+    }
+
+    _createEntity(cfg) {
         // Validate or generate Entity ID
         let id = cfg.id;
         if (id === undefined) {
@@ -2384,11 +2399,69 @@ class PerformanceModel extends Component {
      * Once finalized, you can't add anything more to this PerformanceModel.
      */
     finalize() {
-
         if (this.destroyed) {
             return;
         }
 
+        const self = this;
+        
+        // this._meshQueue.sort((a, b) => {
+        //     return (Math.floor(b.opacity * 255)) - (Math.floor(b.opacity * 255));
+        // }).forEach(mesh => {
+        //     this._createMesh(mesh);
+        // })
+
+        const clusterResult = clusterizeV2 (this._entityQueue, this._meshQueue);
+
+        this._aabbTree = clusterResult.rTreeBasedAabbTree;
+
+        // debugger;
+
+        const alreadyLoadedMeshes = new Array (this._meshQueue.length);
+
+        let lastClusterNumber;
+
+        for (let i = 0, len = clusterResult.orderedClusteredIndexes.length; i < len; i++)
+        {
+            const entityIndex = clusterResult.orderedClusteredIndexes[i];
+
+            const clusterNumber = clusterResult.entityIdToClusterIdMapping[entityIndex];
+
+            const entity = this._entityQueue[entityIndex];
+
+            for (let j = 0, len2 = entity.meshIds.length; j < len2; j++)
+            {
+                const meshIndex = entity.meshIds[j];
+
+                if (alreadyLoadedMeshes[meshIndex])
+                {
+                    continue;
+                }
+
+                alreadyLoadedMeshes[meshIndex] = 1;
+
+                this._createMesh(this._meshQueue[meshIndex], lastClusterNumber !== clusterNumber);
+
+                lastClusterNumber = clusterNumber;
+            }
+
+            // this._createEntity (entity);
+        }
+
+        // clusterResult
+
+        // this._meshQueue.forEach(mesh => {
+        //     this._createMesh(mesh);
+        // });
+
+        this._meshQueue = [];
+
+        this._entityQueue.forEach(entity => {
+            this._createEntity(entity)
+        });
+
+        this._entityQueue = [];
+        
         for (const geometryId in this._instancingLayers) {
             if (this._instancingLayers.hasOwnProperty(geometryId)) {
                 this._instancingLayers[geometryId].finalize();
@@ -2450,6 +2523,341 @@ class PerformanceModel extends Component {
 
     /** @private */
     rebuildRenderFlags() {
+        // if (false)
+        if (this._aabbTree)
+        {
+            let tempVec3 = math.vec3 ();
+
+            let self = this;
+            
+            var me = {
+                canvasElement: this.scene.canvas.canvas,
+                camera: this.scene.camera,
+                aabbTree: this._aabbTree,
+            };
+
+            me._getPointsForBBox = function (bbox) {
+                var retVal = [];
+    
+                for (var i = 0; i < 8; i++)
+                {
+                    retVal.push ([
+                        (i & 1) ? bbox.maxX : bbox.minX,
+                        (i & 2) ? bbox.maxY : bbox.minY,
+                        (i & 4) ? bbox.maxZ : bbox.minZ,
+                    ]);
+                }
+    
+                return retVal;
+            };
+
+            let numIntersectionChecks = 0;
+
+            me._aabbIntersectsCameraFrustum = function (bbox, isLeaf)
+            {
+                if (me.camera.projection == "ortho") {
+                    // TODO: manage ortho views
+                    me._frustumProps.dirty = false;
+                    return true;
+                }
+    
+                numIntersectionChecks++;
+
+                var check = me._aabbIntersectsCameraFrustum_internal (bbox);
+    
+                var interD = !check.allD && !check.noneD;
+                var interH = !check.allH && !check.noneH;
+                var interV = !check.allV && !check.noneV;
+    
+                if ((check.envolvesD || interD || check.allD) &&
+                    (check.envolvesH || interH || check.allH) &&
+                    (check.envolvesV || interV || check.allV))
+                {
+                    return true;
+                }
+    
+                return false;
+            }
+    
+            me._aabbContainedInCameraFrustum = function (bbox)
+            {
+                if (me.camera.projection == "ortho") {
+                    // TODO: manage ortho views
+                    me._frustumProps.dirty = false;
+                    return true;
+                }
+    
+                var check = bbox._check;
+    
+                return check.allD && check.allH && check.allV;
+            };
+    
+            me._frustumProps = {
+                dirty: true,
+                wMultiply: 1.0,
+                hMultiply: 1.0,
+            };
+    
+            me._ensureFrustumPropsUpdated = function ()
+            {
+                const aspect = me.canvasElement.width / me.canvasElement.height;
+    
+                let fov = me.camera.perspective.fov;
+    
+                if (aspect < 1)
+                {
+                    fov = fov / aspect;
+                }
+    
+    
+                fov = Math.min (fov, 120);
+    
+                me._frustumProps.fov = fov;
+                
+                if (!me._frustumProps.dirty)
+                {
+                    return;
+                }
+    
+                me._frustumProps.forward = math.normalizeVec3 (
+                    math.subVec3 (
+                        me.camera.look,
+                        me.camera.eye,
+                        [ 0, 0, 0]
+                    ),
+                    [ 0, 0, 0]
+                );
+    
+                me._frustumProps.up = math.normalizeVec3(
+                    me.camera.up,
+                    [ 0, 0, 0 ]
+                );
+    
+                me._frustumProps.right = math.normalizeVec3 (
+                    math.cross3Vec3 (
+                        me._frustumProps.forward,
+                        me._frustumProps.up,
+                        [ 0, 0, 0]
+                    ),
+                    [ 0, 0, 0 ]
+                );
+    
+                // me._frustumProps.dirty = false;
+    
+            }
+    
+            const retValIntersects = {
+                allD: true,
+                noneD: true,
+                dLess: false,
+                dMore: false,
+                allH: true,
+                noneH: true,
+                hLess: false,
+                hMore: false,
+                allV: true,
+                noneV: true,
+                vLess: false,
+                vMore: false,
+            };
+            me._aabbIntersectsCameraFrustum_internal = function (bbox)
+            {
+                //me._ensureFrustumPropsUpdated ();
+    
+                var bboxPoints = bbox._points || me._getPointsForBBox (bbox);
+    
+                bbox._points = bboxPoints;
+                            
+                var retVal = retValIntersects;
+                
+                retVal.allD = true;
+                retVal.noneD = true;
+                retVal.dLess = false;
+                retVal.dMore = false;
+                retVal.allH = true;
+                retVal.noneH = true;
+                retVal.hLess = false;
+                retVal.hMore = false;
+                retVal.allV = true;
+                retVal.noneV = true;
+                retVal.vLess = false;
+                retVal.vMore = false;
+    
+                for (var i = 0, len = bboxPoints.length; i < len; i++) {
+    
+                    var bboxPoint = bboxPoints [i];
+    
+                    var pointRelToCam = tempVec3;
+
+                    pointRelToCam[0] = bboxPoint[0] - me.camera.eye[0];
+                    pointRelToCam[1] = bboxPoint[1] - me.camera.eye[1];
+                    pointRelToCam[2] = bboxPoint[2] - me.camera.eye[2];
+                    // var pointRelToCam = math.subVec3 (
+                    //     bboxPoint,
+                    //     me.camera.eye,
+                    //     tempVec3
+                    // );
+    
+                    var forwardComponent = math.dotVec3 (
+                        pointRelToCam,
+                        me._frustumProps.forward
+                    );
+    
+                    if (forwardComponent < 0)
+                    {
+                        if (forwardComponent < 0)
+                            retVal.dLess = true;
+                        else
+                            retVal.dMore = true;
+    
+                        retVal.allD = false;
+                    }
+                    else
+                    {
+                        retVal.noneD = false;
+                    }
+    
+                    var rightComponent = math.dotVec3 (
+                        pointRelToCam,
+                        me._frustumProps.right
+                    );
+    
+                    var rightAngle = Math.atan2 (
+                        rightComponent,
+                        forwardComponent
+                    ) * 180 / Math.PI;
+    
+                    // TODO: adjust to canvas width / height
+                    if (Math.abs (rightAngle) > me._frustumProps.fov / 2 * me._frustumProps.wMultiply)
+                    {
+                        if (rightAngle < 0)
+                            retVal.hLess = true;
+                        else
+                            retVal.hMore = true;
+    
+                        retVal.allH = false;
+                    }
+                    else
+                    {
+                        retVal.noneH = false;
+                    }
+                    
+                    var upComponent = math.dotVec3 (
+                        pointRelToCam,
+                        me._frustumProps.up
+                    );
+    
+                    // TODO: adjust to canvas width / height
+                    var upAngle = Math.atan2 (
+                        upComponent,
+                        forwardComponent
+                    ) * 180 / Math.PI;
+    
+                    if (Math.abs (upAngle) > me._frustumProps.fov / 2 * me._frustumProps.hMultiply)
+                    {
+                        if (upAngle < 0)
+                            retVal.vLess = true;
+                        else
+                            retVal.vMore = true;
+    
+                        retVal.allV = false;
+                    }
+                    else
+                    {
+                        retVal.noneV = false;
+                    }
+                }
+    
+                retVal.envolvesD = retVal.dLess && retVal.dMore;
+                retVal.envolvesH = retVal.hLess && retVal.hMore;
+                retVal.envolvesV = retVal.vLess && retVal.vMore;
+    
+                bbox._check = retVal;
+    
+                return retVal;
+            };
+
+            var visibleGeoms = {};
+
+            // Assuming "min" for fovAxis
+            var min = Math.min (
+                me.canvasElement.width,
+                me.canvasElement.height
+            );
+
+            me._frustumProps.wMultiply = me.canvasElement.width / min;
+            me._frustumProps.hMultiply = me.canvasElement.height / min;
+
+            me._ensureFrustumPropsUpdated ();
+
+            if (!this._mappingNodes)
+            {
+                const mappingNodes = [];
+
+                me
+                    .aabbTree
+                    .all()
+                    .sort ((a, b) => a.entity.id - b.entity.id)
+                    .forEach (item => {
+                        mappingNodes.push (this._nodes[item.entity.xeokitId]);
+                    })
+
+                this._mappingNodes = mappingNodes;
+
+                this._mappingNodesCulled = new Array (mappingNodes.length);
+
+                this._mappingNodesCulled.fill(0);
+            }
+
+            this._cullFrame = (this._cullFrame || 0) + 1;
+
+            const cullFrame = this._cullFrame;
+
+            const found = me.aabbTree.searchCustom(
+                me._aabbIntersectsCameraFrustum,
+                me._aabbContainedInCameraFrustum
+            );
+            
+            for (let i = 0, len = found.length; i < len; i++)
+            {
+                self._mappingNodesCulled [found[i].entity.id] = cullFrame;
+            }
+                
+            // console.log (`found: ${found.length}`);
+
+            // debugger;
+
+            let culledNum = 0;
+            let unculledNum = 0;
+            for (let i = 0, len = this._mappingNodes.length; i < len; i++)
+            {
+                const node = this._mappingNodes[i];
+
+                if (self._mappingNodesCulled[i] !== cullFrame)
+                {
+                    if (!node.culled)
+                    {
+                        culledNum++;
+                        node.culled = true;
+                    }
+                }
+                else
+                {
+                    
+                    if (node.culled)
+                    {
+                        unculledNum++;
+                        node.culled = false;
+                    }
+                }
+
+            }
+
+            // console.log (`culled: ${culledNum}, uculled: ${unculledNum}`);
+
+            // console.log (`${numIntersectionChecks} intersection checks`);
+        }
+        
         this.renderFlags.reset();
         this._updateRenderFlagsVisibleLayers();
         if (this.renderFlags.numLayers > 0 && this.renderFlags.numVisibleLayers === 0) {
@@ -2590,7 +2998,12 @@ class PerformanceModel extends Component {
     /** @private */
     drawColorOpaque(frameCtx) {
         const renderFlags = this.renderFlags;
+        this._drawRound = ((this._drawRound || 0) + 0.07);
         for (let i = 0, len = renderFlags.visibleLayers.length; i < len; i++) {
+            // if (i !== (Math.round(this._drawRound) % renderFlags.visibleLayers.length))
+            // {
+            //     continue;
+            // }
             const layerIndex = renderFlags.visibleLayers[i];
             this._layerList[layerIndex].drawColorOpaque(renderFlags, frameCtx);
         }
@@ -2600,6 +3013,10 @@ class PerformanceModel extends Component {
     drawColorTransparent(frameCtx) {
         const renderFlags = this.renderFlags;
         for (let i = 0, len = renderFlags.visibleLayers.length; i < len; i++) {
+            // if (i !== (Math.round(this._drawRound) % renderFlags.visibleLayers.length))
+            // {
+            //     continue;
+            // }
             const layerIndex = renderFlags.visibleLayers[i];
             this._layerList[layerIndex].drawColorTransparent(renderFlags, frameCtx);
         }
@@ -2654,6 +3071,10 @@ class PerformanceModel extends Component {
     drawEdgesColorOpaque(frameCtx) {
         const renderFlags = this.renderFlags;
         for (let i = 0, len = renderFlags.visibleLayers.length; i < len; i++) {
+            // if (i !== (Math.round(this._drawRound) % renderFlags.visibleLayers.length))
+            // {
+            //     continue;
+            // }
             const layerIndex = renderFlags.visibleLayers[i];
             this._layerList[layerIndex].drawEdgesColorOpaque(renderFlags, frameCtx);
         }
@@ -2663,6 +3084,10 @@ class PerformanceModel extends Component {
     drawEdgesColorTransparent(frameCtx) {
         const renderFlags = this.renderFlags;
         for (let i = 0, len = renderFlags.visibleLayers.length; i < len; i++) {
+            // if (i !== (Math.round(this._drawRound) % renderFlags.visibleLayers.length))
+            // {
+            //     continue;
+            // }
             const layerIndex = renderFlags.visibleLayers[i];
             this._layerList[layerIndex].drawEdgesColorTransparent(renderFlags, frameCtx);
         }
