@@ -2155,7 +2155,7 @@ class TrianglesBatchingLayer {
         const lenArray = portionIdsArray.length;
         const textureWidth = 512;
         const textureHeight = Math.ceil (
-            Math.ceil (lenArray / 2) / // every 2 items will use 3 bytes: 12-bits per item
+            lenArray /
             textureWidth
         );
 
@@ -2164,33 +2164,21 @@ class TrianglesBatchingLayer {
             throw "texture height == 0";
         }
 
-        const texArraySize = textureWidth * textureHeight * 3;
-        const texArray = new Uint8Array (texArraySize);
+        const texArraySize = textureWidth * textureHeight;
+        const texArray = new Uint16Array (texArraySize);
+
+        texArray.set (
+            portionIdsArray,
+            0
+        );
 
         ramStats.sizeDataTexturePortionIds += texArray.byteLength;
-
-        let j = 0;
-
-        for (let i = 0; i < lenArray; i+=2)
-        {
-            // upper 12 bits contain object Ids for even polygons/edges
-            let upper8Bits = portionIdsArray[i] >> 4;
-            let half8BitsUpper = portionIdsArray[i] & 15;
-
-            // lower 12 bits contain object Ids for odd polygons/edges
-            let half8BitsLower = portionIdsArray[i+1] >> 8;
-            let lower8Bits = portionIdsArray[i+1] & 255;
-
-            texArray [j++] = upper8Bits;
-            texArray [j++] = (half8BitsUpper << 4) + half8BitsLower;
-            texArray [j++] = lower8Bits;
-        }
 
         const texture = gl.createTexture();
 
         gl.bindTexture (gl.TEXTURE_2D, texture);
 
-        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGB8UI, textureWidth, textureHeight);
+        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R16UI, textureWidth, textureHeight);
 
         gl.texSubImage2D(
             gl.TEXTURE_2D,
@@ -2199,8 +2187,8 @@ class TrianglesBatchingLayer {
             0,
             textureWidth,
             textureHeight,
-            gl.RGB_INTEGER,
-            gl.UNSIGNED_BYTE,
+            gl.RED_INTEGER,
+            gl.UNSIGNED_SHORT,
             texArray,
             0
         );

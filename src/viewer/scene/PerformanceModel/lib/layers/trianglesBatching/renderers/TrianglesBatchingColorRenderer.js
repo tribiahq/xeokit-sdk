@@ -394,17 +394,10 @@ class TrianglesBatchingColorRenderer {
         src.push("int polygonIndex = gl_VertexID / 3;")
 
         // get packed object-id
-        src.push("int h_packed_object_id_index = ((polygonIndex >> 3) / 2) & 511;")
-        src.push("int v_packed_object_id_index = ((polygonIndex >> 3) / 2) >> 9;")
+        src.push("int h_packed_object_id_index = (polygonIndex >> 3) & 511;")
+        src.push("int v_packed_object_id_index = (polygonIndex >> 3) >> 9;")
 
-        src.push("ivec3 packedObjectId = ivec3(texelFetch(uTexturePerPolygonIdPortionIds, ivec2(h_packed_object_id_index, v_packed_object_id_index), 0).rgb);");
-
-        src.push("int objectIndex;")
-        src.push("if (((polygonIndex >> 3) % 2) == 0) {")
-        src.push("  objectIndex = (packedObjectId.r << 4) + (packedObjectId.g >> 4);")
-        src.push("} else {") 
-        src.push("  objectIndex = ((packedObjectId.g & 15) << 8) + packedObjectId.b;")
-        src.push("}")
+        src.push("int objectIndex = int(texelFetch(uTexturePerPolygonIdPortionIds, ivec2(h_packed_object_id_index, v_packed_object_id_index), 0).r);");
 
         // get flags & flags2
         src.push("uvec4 flags = texelFetch (uTexturePerObjectIdColorsAndFlags, ivec2(2, objectIndex), 0);"); // chipmunk
