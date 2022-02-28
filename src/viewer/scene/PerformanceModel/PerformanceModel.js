@@ -2827,30 +2827,9 @@ class PerformanceModel extends Component {
 
             // debugger;
 
-            let culledNum = 0;
-            let unculledNum = 0;
             for (let i = 0, len = this._mappingNodes.length; i < len; i++)
             {
-                const node = this._mappingNodes[i];
-
-                if (self._mappingNodesCulled[i] !== cullFrame)
-                {
-                    if (!node.culled)
-                    {
-                        culledNum++;
-                        node.culled = true;
-                    }
-                }
-                else
-                {
-                    
-                    if (node.culled)
-                    {
-                        unculledNum++;
-                        node.culled = false;
-                    }
-                }
-
+                this._mappingNodes[i].culled = self._mappingNodesCulled[i] !== cullFrame;
             }
 
             // console.log (`culled: ${culledNum}, uculled: ${unculledNum}`);
