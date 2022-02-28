@@ -2358,10 +2358,10 @@ class TrianglesBatchingLayer {
             throw "Not finalized";
         }
         if (flags & ENTITY_FLAGS.CULLED) {
-            this._numCulledLayerPortions++;
+            this._numCulledLayerPortions+=this._portionIdFanOut[portionId].length;
             this.model.numCulledLayerPortions++;
         } else {
-            this._numCulledLayerPortions--;
+            this._numCulledLayerPortions-=this._portionIdFanOut[portionId].length;
             this.model.numCulledLayerPortions--;
         }
         this._setFlags(portionId, flags, transparent);
