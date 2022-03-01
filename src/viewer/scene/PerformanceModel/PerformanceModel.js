@@ -31,6 +31,43 @@ const defaultPosition = math.vec3([0, 0, 0]);
 const defaultRotation = math.vec3([0, 0, 0]);
 const defaultQuaternion = math.identityQuaternion();
 
+const atan2LUT = new Float32Array (256*256);
+
+for (let i = -128; i < 128; i++)
+{
+    for (let j = -128; j < 128; j++)
+    {
+        const index = (i+128)*256 + (j+128);
+
+        const max = Math.max (
+            Math.abs (i),
+            Math.abs (j)
+        );
+
+        atan2LUT [index] = Math.atan2 (
+            i/max,
+            j/max
+        );
+    }
+}
+
+function fastAtan2(x, y)
+{
+    const max = Math.max (
+        Math.abs (x),
+        Math.abs (y)
+    );
+
+    const xx = Math.round (
+        (x / max) * 128
+    ) + 127;
+
+    const yy = Math.round (
+        (y / max) * 128
+    ) + 127;
+
+    return atan2LUT [xx * 256 + yy];
+}
 /**
  * @desc A high-performance model representation for efficient rendering and low memory usage.
  *
