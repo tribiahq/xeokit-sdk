@@ -317,6 +317,14 @@ class PerformanceNode {
         this.model.glRedraw();
     }
 
+    get culledLOD() {
+        return !!(this._culledLOD);
+    }
+    set culledLOD(culled) {
+        this._culledLOD = culled;
+        this.internalSetCulled ();
+    }
+
     /**
      * Gets if this PerformanceNode is culled.
      *
@@ -325,7 +333,8 @@ class PerformanceNode {
      * @type {Boolean}
      */
     get culled() {
-        return this._getFlag(ENTITY_FLAGS.CULLED);
+        return !!(this._culled);
+        // return this._getFlag(ENTITY_FLAGS.CULLED);
     }
 
     /**
@@ -336,9 +345,18 @@ class PerformanceNode {
      * @type {Boolean}
      */
     set culled(culled) {
+        this._culled = culled;
+        this.internalSetCulled ();
+    }
+
+    internalSetCulled()
+    {
+        let culled = !!(this._culled) || !!(this._culledLOD);
+
         if (!!(this._flags & ENTITY_FLAGS.CULLED) === culled) {
             return; // Redundant update
         }
+
         if (culled) {
             this._flags = this._flags | ENTITY_FLAGS.CULLED;
         } else {

@@ -75,6 +75,71 @@ function fastAtan2(x, y)
 }
 
 const _180_DIV_MATH_PI = 180 / Math.PI;
+
+/**
+ * Time to discount for frame-per-second tracking.
+ * 
+ * Takes into account any possible time that could have been spent culling the objects.
+ */
+let ellapsedCullingTimeMs = 0;
+
+/**
+ * True is the frame-per-second tracker for LOD-culling is installed, false otherwise.
+ */
+let attachedFpsTracker = false;
+
+/**
+ * Registered LOD-culling tasks to be triggered at each `scene.tick` event.
+ */
+let lodCullingTasks = [];
+
+/**
+ * Attach a custom frames-per-second tracker for the LOD-culling mechanism.
+ */
+function attachLodCullingFPSTracker (scene)
+{
+    if (attachedFpsTracker)
+    {
+        return;
+    }
+
+    attachedFpsTracker = true;
+
+    const MAX_NUM_TICKS = 10;
+    let tickTimeArray = new Array (MAX_NUM_TICKS);
+    let numTick = 0;
+
+    scene.on ("tick", function (tickEvent) {
+        tickTimeArray[numTick % MAX_NUM_TICKS] = tickEvent.deltaTime;
+
+        // Discount any time spent in LOD-culling, so the culling does not affect itself
+        // the frames-per-second metric.
+        tickTimeArray[numTick % MAX_NUM_TICKS] -= ellapsedCullingTimeMs;
+
+        ellapsedCullingTimeMs = 0;
+
+        numTick++;
+
+        if (numTick > MAX_NUM_TICKS)
+        {
+            let sumTickTimes = 0;
+
+            for (let i = 0; i < MAX_NUM_TICKS; i++)
+            {
+                sumTickTimes += tickTimeArray[i];
+            }
+
+            const currentFPS = MAX_NUM_TICKS / sumTickTimes * 1000;
+
+            // Call LOD-culling tasks
+            for (let i = 0, len = lodCullingTasks.length; i < len; i += 2)
+            {
+                lodCullingTasks[i].call (lodCullingTasks[i+1], currentFPS);
+            }
+        }
+    });
+}
+
 /**
  * @desc A high-performance model representation for efficient rendering and low memory usage.
  *
@@ -1144,6 +1209,8 @@ class PerformanceModel extends Component {
 
         this._meshQueue = [];
         this._entityQueue = [];
+        
+        attachLodCullingFPSTracker (this.scene);
     }
 
     //------------------------------------------------------------------------------------------------------------------
@@ -2550,6 +2617,13 @@ class PerformanceModel extends Component {
         this.glRedraw();
 
         this.scene._aabbDirty = true;
+
+        // Initialize LOD data structures
+        this.initializeLod ();
+
+        // Register the LOD-culling tasks to be triggered at each `scene.tick` event.
+        lodCullingTasks.push (this.applyLodCulling);
+        lodCullingTasks.push (this);
     }
 
     _rebuildAABB() {
@@ -2888,6 +2962,208 @@ class PerformanceModel extends Component {
             return;
         }
         this._updateRenderFlags();
+    }
+
+    /**
+     * 
+     * 
+     * @private
+     */
+    applyLodCulling (currentFPS)
+    {
+        let lodData = this._lodData;
+
+        if (!lodData)
+        {
+            return;
+        }
+
+        /** 
+         * Cull any objects belonging to the current `LOD` level, and increase the `LOD` level.
+         */
+        function _increaseLODLevelIndex ()
+        {
+            if (lodData.lodLevelIndex == lodData.triangleLODLevels.length)
+            {
+                return;
+            }
+
+            // console.time ("_increaseLODLevelIndex");
+
+            const nodesInLOD = lodData.nodesInLOD [lodData.triangleLODLevels[lodData.lodLevelIndex]] || [];
+
+            for (let i = 0, len = nodesInLOD.length; i < len; i++)
+            {
+                nodesInLOD[i].culledLOD = true;
+            }
+
+            lodData.lodLevelIndex++;
+            
+            // console.timeEnd ("_increaseLODLevelIndex");
+
+            console.log ("LOD level = " + lodData.lodLevelIndex);
+        }
+
+        /** 
+         * Un-cull any objects belonging to the current `LOD` level, and decrease the `LOD` level.
+         */
+        function _decreaseLODLevelIndex ()
+        {
+            if (lodData.lodLevelIndex == 0)
+            {
+                return;
+            }
+
+            // console.time ("_decreaseLODLevelIndex");
+
+            const nodesInLOD = lodData.nodesInLOD [lodData.triangleLODLevels[lodData.lodLevelIndex - 1]] || [];
+
+            for (let i = 0, len = nodesInLOD.length; i < len; i++)
+            {
+                nodesInLOD[i].culledLOD = false;
+            }
+
+            lodData.lodLevelIndex--;
+
+            // console.timeEnd ("_decreaseLODLevelIndex");
+
+            console.log ("LOD level = " + lodData.lodLevelIndex);
+        }
+
+        const startTime = new Date ();
+
+        if (currentFPS < lodData.targetFps)
+        {
+            if (++lodData.consecutiveFramesWithoutTargetFps > 20)
+            {
+                lodData.consecutiveFramesWithoutTargetFps = 0;
+                _increaseLODLevelIndex();
+            }
+        }
+        else if (currentFPS > (lodData.targetFps + 4))
+        {
+            if (++lodData.consecutiveFramesWithTargetFps > 20)
+            {
+                lodData.consecutiveFramesWithTargetFps = 0;
+                _decreaseLODLevelIndex();
+            }
+        }
+
+        const endTime = new Date ();
+
+        ellapsedCullingTimeMs += endTime - startTime;
+    }
+
+    /**
+     * Pre-initialize the data structures needed for `LOD` mechanism.
+     * 
+     * @private
+     */
+    initializeLod ()
+    {
+        if (this._lodData)
+        {
+            return;
+        }
+
+        if (this._nodeList.length == 0)
+        {
+            return;
+        }
+
+        console.time ("initializeLodDataIfNeeded");
+
+        const LOD_LEVELS = [ 2000, 600, 150, 80, 20 ];
+        const LOD_RESTORE_TIME = 600;
+        const LOD_TARGET_FPS = 55;
+
+        let nodesInLOD = {};
+        let triangleCountInLOD = {};
+
+        for (let i = 0, len = this._nodeList.length; i < len; i++)
+        {
+            const node = this._nodeList[i];
+
+            let lodLevel, len;
+
+            for (lodLevel = 0, len = LOD_LEVELS.length; lodLevel < len; lodLevel++)
+            {
+                if (node.numTriangles >= LOD_LEVELS [lodLevel])
+                {
+                    break;
+                }
+            }
+
+            var lodPolys = LOD_LEVELS [lodLevel] || 0;
+
+            if (!nodesInLOD [lodPolys])
+            {
+                nodesInLOD [lodPolys] = [];
+            }
+
+            nodesInLOD [lodPolys].push (node);
+
+            if (!triangleCountInLOD [lodPolys])
+            {
+                triangleCountInLOD [lodPolys] = 0;
+            }
+
+            triangleCountInLOD [lodPolys] += node.numTriangles;
+        }
+
+        console.log (triangleCountInLOD);
+
+        /**
+         * Data structure containing pre-initialized `LOD` data.
+         * 
+         * Will be used by the rest of `LOD` related code.
+         */
+        this._lodData = {
+            /**
+             * An array ordered DESC with the number of triangles allowed in each LOD bucket.
+             */
+            triangleLODLevels: LOD_LEVELS,
+            /**
+             * A computed dictionary for `triangle-number-buckets` where:
+             * - key: the number of triangles allowed for the objects in the bucket.
+             * - value: all PerformanceNodes that have the number of triangles or more.
+             */
+            nodesInLOD,
+            /**
+             * A computed dictionary for `triangle-number-buckets` where:
+             * - key: the number of triangles allowed for the objects in the bucket.
+             * - value: the sum of triangles counts for all PeformanceNodes in the bucket.
+             */
+            triangleCountInLOD,
+            /**
+             * The target FPS for the `LOD` mechanism:
+             * - if real FPS are below this number, the next `LOD` level will be applied.
+             * 
+             * - if real FPS are...
+             *   - above this number plus a margin
+             *   - and for some consecutive frames
+             *  ... then the previous `LOD` level will be applied.
+             */
+            targetFps: LOD_TARGET_FPS,
+            /**
+             * Not used at the moment.
+             */
+            restoreTime: LOD_RESTORE_TIME,
+            /**
+             * Current `LOD` level. Starts at 0.
+             */
+            lodLevelIndex: 0,
+            /**
+             * Number of consecutive frames in current `LOD` level where FPS was above `targetFps`
+             */
+            consecutiveFramesWithTargetFps: 0,
+            /**
+             * Number of consecutive frames in current `LOD` level where FPS was below `targetFps`
+             */
+            consecutiveFramesWithoutTargetFps: 0,
+        };
+
+        console.timeEnd ("initializeLodDataIfNeeded");
     }
 
     /**
