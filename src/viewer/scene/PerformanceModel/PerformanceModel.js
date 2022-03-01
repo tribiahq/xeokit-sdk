@@ -37,7 +37,7 @@ for (let i = -128; i < 128; i++)
 {
     for (let j = -128; j < 128; j++)
     {
-        const index = (i+128)*256 + (j+128);
+        const index = ((i+128) << 8) + (j+128);
 
         const max = Math.max (
             Math.abs (i),
@@ -66,7 +66,7 @@ function fastAtan2(x, y)
         (y / max) * 128
     ) + 127;
 
-    return atan2LUT [xx * 256 + yy];
+    return atan2LUT [(xx << 8) + yy];
 }
 /**
  * @desc A high-performance model representation for efficient rendering and low memory usage.
@@ -2759,7 +2759,7 @@ class PerformanceModel extends Component {
                         me._frustumProps.right
                     );
     
-                    var rightAngle = Math.atan2 (
+                    var rightAngle = fastAtan2 (
                         rightComponent,
                         forwardComponent
                     ) * 180 / Math.PI;
@@ -2785,7 +2785,7 @@ class PerformanceModel extends Component {
                     );
     
                     // TODO: adjust to canvas width / height
-                    var upAngle = Math.atan2 (
+                    var upAngle = fastAtan2 (
                         upComponent,
                         forwardComponent
                     ) * 180 / Math.PI;
