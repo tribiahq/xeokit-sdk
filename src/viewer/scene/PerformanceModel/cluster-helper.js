@@ -10,7 +10,7 @@ import {RBush3D} from "./rbush3d.js";
 import {makeClusters} from "./xeokit-cluster.js"
 
 function generateAABB (aabbsForIndexes) {
-    var aabbTree = new RBush3D ();
+    var aabbTree = new RBush3D (4);
 
     Object.keys (aabbsForIndexes).forEach (function (index) {
         var item = aabbsForIndexes [index];

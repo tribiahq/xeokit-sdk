@@ -176,7 +176,7 @@ var compareMinZ = function (a, b) { return a.minZ - b.minZ; };
 var RBush3D = (function () {
     function RBush3D(maxEntries) {
         if (maxEntries === void 0) { maxEntries = 16; }
-        this.maxEntries = Math.max(maxEntries, 8);
+        this.maxEntries = Math.max(maxEntries, 4); // chipmunk
         this.minEntries = Math.max(4, Math.ceil(this.maxEntries * 0.4));
         this.clear();
     }
