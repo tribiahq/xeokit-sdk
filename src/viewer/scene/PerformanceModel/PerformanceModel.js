@@ -2562,7 +2562,7 @@ class PerformanceModel extends Component {
 
             for (let i = 0, len = nodesInLOD.length; i < len; i++)
             {
-                nodesInLOD[i].culled = true;
+                nodesInLOD[i].culledLOD = true;
             }
 
             lodData.lodLevelIndex++;
@@ -2588,7 +2588,7 @@ class PerformanceModel extends Component {
 
             for (let i = 0, len = nodesInLOD.length; i < len; i++)
             {
-                nodesInLOD[i].culled = false;
+                nodesInLOD[i].culledLOD = false;
             }
 
             lodData.lodLevelIndex--;
