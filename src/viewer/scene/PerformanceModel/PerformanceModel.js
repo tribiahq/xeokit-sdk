@@ -2644,6 +2644,15 @@ class PerformanceModel extends Component {
     
             me._ensureFrustumPropsUpdated = function ()
             {
+                // Assuming "min" for fovAxis
+                const min = Math.min (
+                    me.canvasElement.width,
+                    me.canvasElement.height
+                );
+
+                me._frustumProps.wMultiply = me.canvasElement.width / min;
+                me._frustumProps.hMultiply = me.canvasElement.height / min;
+                
                 const aspect = me.canvasElement.width / me.canvasElement.height;
     
                 let fov = me.camera.perspective.fov;
@@ -2653,15 +2662,14 @@ class PerformanceModel extends Component {
                     fov = fov / aspect;
                 }
     
-    
                 fov = Math.min (fov, 120);
     
                 me._frustumProps.fov = fov;
                 
-                if (!me._frustumProps.dirty)
-                {
-                    return;
-                }
+                // if (!me._frustumProps.dirty)
+                // {
+                //     return;
+                // }
     
                 me._frustumProps.forward = math.normalizeVec3 (
                     math.subVec3 (
@@ -2823,17 +2831,6 @@ class PerformanceModel extends Component {
     
                 return retVal;
             };
-
-            var visibleGeoms = {};
-
-            // Assuming "min" for fovAxis
-            var min = Math.min (
-                me.canvasElement.width,
-                me.canvasElement.height
-            );
-
-            me._frustumProps.wMultiply = me.canvasElement.width / min;
-            me._frustumProps.hMultiply = me.canvasElement.height / min;
 
             me._ensureFrustumPropsUpdated ();
 
