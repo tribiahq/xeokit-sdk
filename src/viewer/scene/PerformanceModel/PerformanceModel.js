@@ -73,6 +73,8 @@ function fastAtan2(x, y)
 
     return atan2LUT [(xx << ATAN2_LUT_BITS) + yy];
 }
+
+const _180_DIV_MATH_PI = 180 / Math.PI;
 /**
  * @desc A high-performance model representation for efficient rendering and low memory usage.
  *
@@ -2684,6 +2686,9 @@ class PerformanceModel extends Component {
                     [ 0, 0, 0 ]
                 );
     
+                me._frustumProps.CAM_FACTOR_1 = me._frustumProps.fov / 2 * me._frustumProps.wMultiply / _180_DIV_MATH_PI;
+                me._frustumProps.CAM_FACTOR_2 = me._frustumProps.fov / 2 * me._frustumProps.hMultiply / _180_DIV_MATH_PI;
+
                 // me._frustumProps.dirty = false;
     
             }
@@ -2767,10 +2772,10 @@ class PerformanceModel extends Component {
                     var rightAngle = fastAtan2 (
                         rightComponent,
                         forwardComponent
-                    ) * 180 / Math.PI;
+                    );
     
                     // TODO: adjust to canvas width / height
-                    if (Math.abs (rightAngle) > me._frustumProps.fov / 2 * me._frustumProps.wMultiply)
+                    if (Math.abs (rightAngle) > me._frustumProps.CAM_FACTOR_1)
                     {
                         if (rightAngle < 0)
                             retVal.hLess = true;
@@ -2793,9 +2798,9 @@ class PerformanceModel extends Component {
                     var upAngle = fastAtan2 (
                         upComponent,
                         forwardComponent
-                    ) * 180 / Math.PI;
+                    );
     
-                    if (Math.abs (upAngle) > me._frustumProps.fov / 2 * me._frustumProps.hMultiply)
+                    if (Math.abs (upAngle) > me._frustumProps.CAM_FACTOR_2)
                     {
                         if (upAngle < 0)
                             retVal.vLess = true;
