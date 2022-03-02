@@ -109,7 +109,26 @@ function attachLodCullingFPSTracker (scene)
     let tickTimeArray = new Array (MAX_NUM_TICKS);
     let numTick = 0;
 
+    let currentFPS = -1;
+    let lastCullApplied;
+
     scene.on ("tick", function (tickEvent) {
+        let cullApplied = false;
+
+        if (currentFPS != -1 && !lastCullApplied)
+        {
+            // Call LOD-culling tasks
+            for (let i = 0, len = lodCullingTasks.length; i < len; i += 2)
+            {
+                cullApplied |= lodCullingTasks[i].call (lodCullingTasks[i+1], currentFPS);
+            }
+        }
+
+        if (cullApplied)
+        {
+            return;
+        }
+
         tickTimeArray[numTick % MAX_NUM_TICKS] = tickEvent.deltaTime;
 
         // Discount any time spent in LOD-culling, so the culling does not affect itself
@@ -120,22 +139,16 @@ function attachLodCullingFPSTracker (scene)
 
         numTick++;
 
+        let sumTickTimes = 0;
+
         if (numTick > MAX_NUM_TICKS)
         {
-            let sumTickTimes = 0;
-
             for (let i = 0; i < MAX_NUM_TICKS; i++)
             {
                 sumTickTimes += tickTimeArray[i];
             }
-
-            const currentFPS = MAX_NUM_TICKS / sumTickTimes * 1000;
-
-            // Call LOD-culling tasks
-            for (let i = 0, len = lodCullingTasks.length; i < len; i += 2)
-            {
-                lodCullingTasks[i].call (lodCullingTasks[i+1], currentFPS);
-            }
+    
+            currentFPS = MAX_NUM_TICKS / sumTickTimes * 1000;
         }
     });
 }
@@ -3038,12 +3051,15 @@ class PerformanceModel extends Component {
 
         this.beginDeferredFlagsInAllLayers ();
 
+        let retVal = false;
+
         if (currentFPS < lodData.targetFps)
         {
-            if (++lodData.consecutiveFramesWithoutTargetFps > 20)
+            if (++lodData.consecutiveFramesWithoutTargetFps > 8)
             {
                 lodData.consecutiveFramesWithoutTargetFps = 0;
                 _increaseLODLevelIndex();
+                retVal = true;
             }
         }
         else if (currentFPS > (lodData.targetFps + 4))
@@ -3052,6 +3068,7 @@ class PerformanceModel extends Component {
             {
                 lodData.consecutiveFramesWithTargetFps = 0;
                 _decreaseLODLevelIndex();
+                retVal = true;
             }
         }
 
@@ -3060,6 +3077,8 @@ class PerformanceModel extends Component {
         const endTime = new Date ();
 
         ellapsedCullingTimeMs += endTime - startTime;
+
+        return retVal;
     }
 
     /**
