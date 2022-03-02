@@ -2750,6 +2750,43 @@ class PerformanceModel extends Component {
         }
     }
 
+    /**
+     * This will start a "set-flags transaction" in all Layers of this Model.
+     * 
+     * @private
+     */
+    beginDeferredFlagsInAllLayers ()
+    {
+        for (let i = 0, len = this._layerList.length; i < len; i++)
+        {
+            const layer = this._layerList[i];
+
+            if (layer.beginDeferredFlags)
+            {
+                layer.beginDeferredFlags ();
+            }
+        }
+    }
+    
+    /**
+     * This will commit any previously started "set-flags transaction" in all
+     * Layers of this Model.
+     * 
+     * @private
+     */
+    commitDeferredFlagsInAllLayers ()
+    {
+        for (let i = 0, len = this._layerList.length; i < len; i++)
+        {
+            const layer = this._layerList[i];
+
+            if (layer.flushDeferredFlags)
+            {
+                layer.flushDeferredFlags ();
+            }
+        }
+    }
+
     /** @private */
     _getActiveSectionPlanesForLayer(layer) {
 
