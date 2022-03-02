@@ -2600,6 +2600,8 @@ class PerformanceModel extends Component {
 
         const startTime = new Date ();
 
+        this.beginDeferredFlagsInAllLayers ();
+
         if (currentFPS < lodData.targetFps)
         {
             if (++lodData.consecutiveFramesWithoutTargetFps > 20)
@@ -2616,6 +2618,8 @@ class PerformanceModel extends Component {
                 _decreaseLODLevelIndex();
             }
         }
+
+        this.commitDeferredFlagsInAllLayers ();
 
         const endTime = new Date ();
 
