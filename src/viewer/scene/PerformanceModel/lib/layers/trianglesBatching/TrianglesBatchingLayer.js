@@ -1061,6 +1061,8 @@ class TrianglesBatchingLayer {
 
         state.texturePerObjectIdColorsAndFlags = colorsAndFlagsTexture.texture;
         state.texturePerObjectIdColorsAndFlagsHeight = colorsAndFlagsTexture.textureHeight;
+        state.texturePerObjectIdColorsAndFlagsWidth = colorsAndFlagsTexture.textureWidth;
+        state.texturePerObjectIdColorsAndFlagsData = colorsAndFlagsTexture.texArray;
 
         // b) positions decode matrices texture
         const decodeMatrixTexture = this.generateTextureForPositionsDecodeMatrices (
@@ -1418,18 +1420,6 @@ class TrianglesBatchingLayer {
             texArray,
             0
         );
-        // gl.texImage2D (
-        //     gl.TEXTURE_2D,
-        //     0,
-        //     gl.RGBA8UI,
-        //     textureWidth,
-        //     textureHeight,
-        //     0,
-        //     gl.RGBA_INTEGER,
-        //     gl.UNSIGNED_BYTE,
-        //     texArray,
-        //     0
-        // );
 
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
@@ -1440,7 +1430,9 @@ class TrianglesBatchingLayer {
 
         return {
             texture,
-            textureHeight
+            textureHeight,
+            textureWidth,
+            texArray
         };
     }
 
@@ -2353,15 +2345,71 @@ class TrianglesBatchingLayer {
         this._setFlags2(portionId, flags);
     }
 
+    /**
+     * This will _start_ a "set-flags transaction".
+     * 
+     * After invoking this method, calling setFlags/setFlags2 will not update
+     * the colors+flags texture but only store the new flags/flag2 in the
+     * colors+flags texture.
+     * 
+     * After invoking this method, and when all desired setFlags/setFlags2 have
+     * been called on needed portions of the layer, invoke `commitDeferredFlags`
+     * to actually update the texture data.
+     * 
+     * In massive "set-flags" scenarios like VFC or LOD mechanisms, the combina-
+     * tion of `beginDeferredFlags` + `commitDeferredFlags`brings a speed-up of
+     * up to 80x when e.g. objects are massively (un)culled 🚀.
+     */
+    beginDeferredFlags ()
+    {
+        this._deferredSetFlagsActive = true;
+    }
+
+    /**
+     * This will _commit_ a "set-flags transaction".
+     * 
+     * Invoking this method will update the colors+flags texture data with new
+     * flags/flags2 set since the previous invocation of `beginDeferredFlags`.
+     */
+    commitDeferredFlags ()
+    {
+        this._deferredSetFlagsActive = false;
+
+        if (!this._deferredSetFlagsDirty)
+        {
+            return;
+        }
+
+        this._deferredSetFlagsDirty = false;
+
+        const gl = this.model.scene.canvas.gl;
+        const state = this._state;
+        
+        gl.bindTexture (gl.TEXTURE_2D, state.texturePerObjectIdColorsAndFlags);
+
+        gl.texSubImage2D(
+            gl.TEXTURE_2D,
+            0, // level
+            0, // xoffset
+            0, // yoffset
+            state.texturePerObjectIdColorsAndFlagsWidth, // width
+            state.texturePerObjectIdColorsAndFlagsHeight, //height
+            gl.RGBA_INTEGER,
+            gl.UNSIGNED_BYTE,
+            state.texturePerObjectIdColorsAndFlagsData
+        );
+    }
+
     setCulled(portionId, flags, transparent) {
         if (!this._finalized) {
             throw "Not finalized";
         }
+        
         if (flags & ENTITY_FLAGS.CULLED) {
-            this._numCulledLayerPortions++;
+            this._numCulledLayerPortions+=this._portionIdFanOut[portionId].length;
             this.model.numCulledLayerPortions++;
         } else {
-            this._numCulledLayerPortions--;
+            this._numCulledLayerPortions-=this._portionIdFanOut[portionId].length;
             this.model.numCulledLayerPortions--;
         }
         this._setFlags(portionId, flags, transparent);
@@ -2499,12 +2547,24 @@ class TrianglesBatchingLayer {
         const state = this._state;
         const gl = this.model.scene.canvas.gl;
 
-        gl.bindTexture (gl.TEXTURE_2D, state.texturePerObjectIdColorsAndFlags);
-
         tempUint8Array4 [0] = f0;
         tempUint8Array4 [1] = f1;
         tempUint8Array4 [2] = f2;
         tempUint8Array4 [3] = f3;
+
+        // object flags
+        state.texturePerObjectIdColorsAndFlagsData.set (
+            tempUint8Array4,
+            portionId * 24 + 8
+        );
+
+        if (this._deferredSetFlagsActive)
+        {
+            this._deferredSetFlagsDirty = true;
+            return;
+        }
+
+        gl.bindTexture (gl.TEXTURE_2D, state.texturePerObjectIdColorsAndFlags);
 
         gl.texSubImage2D(
             gl.TEXTURE_2D,
@@ -2518,7 +2578,7 @@ class TrianglesBatchingLayer {
             tempUint8Array4
         );
 
-        gl.bindTexture (gl.TEXTURE_2D, null);
+        // gl.bindTexture (gl.TEXTURE_2D, null);
     }
 
     _setDeferredFlags() {
@@ -2545,12 +2605,24 @@ class TrianglesBatchingLayer {
         const state = this._state;
         const gl = this.model.scene.canvas.gl;
 
-        gl.bindTexture (gl.TEXTURE_2D, state.texturePerObjectIdColorsAndFlags);
-
         tempUint8Array4 [0] = clippable;
         tempUint8Array4 [1] = 0;
         tempUint8Array4 [2] = 1;
         tempUint8Array4 [3] = 2;
+
+        // object flags2
+        state.texturePerObjectIdColorsAndFlagsData.set (
+            tempUint8Array4,
+            portionId * 24 + 12
+        );
+        
+        if (this._deferredSetFlagsActive)
+        {
+            this._deferredSetFlagsDirty = true;
+            return;
+        }
+        
+        gl.bindTexture (gl.TEXTURE_2D, state.texturePerObjectIdColorsAndFlags);
 
         gl.texSubImage2D(
             gl.TEXTURE_2D,
@@ -2563,7 +2635,8 @@ class TrianglesBatchingLayer {
             gl.UNSIGNED_BYTE,
             tempUint8Array4
         );
-        gl.bindTexture (gl.TEXTURE_2D, null);
+
+        // gl.bindTexture (gl.TEXTURE_2D, null);
     }
 
     _setDeferredFlags2() {
