@@ -2945,10 +2945,14 @@ class PerformanceModel extends Component {
 
             // debugger;
 
+            this.beginDeferredFlagsInAllLayers ();
+
             for (let i = 0, len = this._mappingNodes.length; i < len; i++)
             {
                 this._mappingNodes[i].culled = self._mappingNodesCulled[i] !== cullFrame;
             }
+
+            this.commitDeferredFlagsInAllLayers ();
 
             // console.log (`culled: ${culledNum}, uculled: ${unculledNum}`);
 
@@ -3178,6 +3182,43 @@ class PerformanceModel extends Component {
             const layerVisible = this._getActiveSectionPlanesForLayer(layer);
             if (layerVisible) {
                 renderFlags.visibleLayers[renderFlags.numVisibleLayers++] = layerIndex;
+            }
+        }
+    }
+
+    /**
+     * This will start a "set-flags transaction" in all Layers of this Model.
+     * 
+     * @private
+     */
+    beginDeferredFlagsInAllLayers ()
+    {
+        for (let i = 0, len = this._layerList.length; i < len; i++)
+        {
+            const layer = this._layerList[i];
+
+            if (layer.beginDeferredFlags)
+            {
+                layer.beginDeferredFlags ();
+            }
+        }
+    }
+    
+    /**
+     * This will commit any previously started "set-flags transaction" in all
+     * Layers of this Model.
+     * 
+     * @private
+     */
+    commitDeferredFlagsInAllLayers ()
+    {
+        for (let i = 0, len = this._layerList.length; i < len; i++)
+        {
+            const layer = this._layerList[i];
+
+            if (layer.flushDeferredFlags)
+            {
+                layer.flushDeferredFlags ();
             }
         }
     }
