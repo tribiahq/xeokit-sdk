@@ -2871,10 +2871,14 @@ class PerformanceModel extends Component {
 
             // debugger;
 
+            this.beginDeferredFlagsInAllLayers ();
+
             for (let i = 0, len = this._mappingNodes.length; i < len; i++)
             {
                 this._mappingNodes[i].culled = self._mappingNodesCulled[i] !== cullFrame;
             }
+
+            this.commitDeferredFlagsInAllLayers ();
 
             // console.log (`culled: ${culledNum}, uculled: ${unculledNum}`);
 
