@@ -263,10 +263,6 @@ class TrianglesBatchingLayer {
              */
             texturePerObjectIdColorsAndFlags: null,
             /**
-             * The number of objects stored in `texturePerObjectIdColorsAndFlags`.
-             */
-            texturePerObjectIdColorsAndFlagsHeight: null,
-            /**
              * Texture that holds the positionsDecodeMatrix per-object:
              * - columns: each column is one column of the matrix
              * - row: the object Id
@@ -276,7 +272,6 @@ class TrianglesBatchingLayer {
              * Texture that holds all the `different-vertices` used by the layer.
              */            
             texturePerVertexIdCoordinates: null,
-            texturePerVertexIdCoordinatesHeight: null,
             /**
              * Texture that holds the PortionId that corresponds to a given polygon-id.
              * 

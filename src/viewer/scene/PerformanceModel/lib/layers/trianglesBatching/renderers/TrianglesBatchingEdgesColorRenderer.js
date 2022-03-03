@@ -241,7 +241,6 @@ class TrianglesBatchingEdgesColorRenderer {
         src.push("#endif");
 
         src.push("uniform int renderPass;");
-        src.push("uniform highp int texturePerObjectIdColorsAndFlagsHeight;");
 
         if (scene.entityOffsetsEnabled) {
             src.push("in vec3 offset;");

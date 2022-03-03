@@ -89,8 +89,6 @@ class TrianglesBatchingPickMeshRenderer {
             3
         ); // chipmunk
 
-        gl.uniform1i(this._uTexturePerObjectIdColorsAndFlagsHeight, state.texturePerObjectIdColorsAndFlagsHeight);
-
         gl.uniform1i(this._uRenderPass, renderPass);
         gl.uniformMatrix4fv(this._uWorldMatrix, false, model.worldMatrix);
 
@@ -255,7 +253,6 @@ class TrianglesBatchingPickMeshRenderer {
 
         const program = this._program;
 
-        this._uTexturePerObjectIdColorsAndFlagsHeight = program.getLocation("texturePerObjectIdColorsAndFlagsHeight");
         this._uRenderPass = program.getLocation("renderPass");
         this._uPickInvisible = program.getLocation("pickInvisible");
         this._uPositionsDecodeMatrix = program.getLocation("positionsDecodeMatrix");
@@ -327,10 +324,8 @@ class TrianglesBatchingPickMeshRenderer {
         src.push("#endif");
 
         src.push("uniform int renderPass;");
-        src.push("uniform highp int texturePerObjectIdColorsAndFlagsHeight;");
 
         src.push("in uvec3 packedVertexId;");
-
 
         if (scene.entityOffsetsEnabled) {
             src.push("in vec3 offset;");
