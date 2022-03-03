@@ -713,11 +713,6 @@ class TrianglesBatchingLayer {
         const numVerts = positions.length / 3;
         const lenPositions = positions.length;
 
-        for (let i = 0; i < numVerts; i++)
-        {
-            buffer.objectData.push (this._numPortions); // chipmunk
-        }
-
         if (this._preCompressed) {
 
             for (let i = 0, len = positions.length; i < len; i++) {
@@ -853,8 +848,6 @@ class TrianglesBatchingLayer {
                     buffer.indices32Bits.push(indices[i+1]);
                     buffer.indices32Bits.push(indices[i+2]);
                 }
-                // buffer.indices.push(indices[i]);
-                // buffer.indices.push(indices[i+1]);
 
                 if ((triangleNumber % INDICES_EDGE_INDICES_ALIGNEMENT_SIZE) == 0) {
                     if (numUniquePositions <= (1<< 8)) {
@@ -918,8 +911,7 @@ class TrianglesBatchingLayer {
                     buffer.edgeIndices32Bits.push(edgeIndices[i]);
                     buffer.edgeIndices32Bits.push(edgeIndices[i+1]);
                 }
-                // buffer.edgeIndices.push(edgeIndices[i]);
-                // buffer.edgeIndices.push(edgeIndices[i+1]);
+
                 if ((edgeNumber % INDICES_EDGE_INDICES_ALIGNEMENT_SIZE) == 0) {
                     if (numUniquePositions <= (1<< 8)) {
                         this._portionIdForEdges8Bits.push (this._numPortions);
