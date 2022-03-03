@@ -256,20 +256,102 @@ class TrianglesBatchingLayer {
         this._scratchMemory = cfg.scratchMemory;
 
         this._state = new RenderState({
-            positionsBuf: null,
             offsetsBuf: null,
-            normalsBuf: null,
-            colorsBuf: null,
             metallicRoughnessBuf: null,
-            flagsBuf: null,
-            flags2Buf: null,
-            indicesBuf: null,
-            edgeIndicesBuf: null,
             positionsDecodeMatrix: math.mat4(),
-            texturePerObjectIdPositionsDecodeMatrix: null,
-            texturePerObjectIdPositionsDecodeMatrixHeight: null,
+            /**
+             * Texture that holds colors/pickColors/flags/flags2 per-object:
+             * - columns: one concept per column => color / pick-color / ...
+             * - row: the object Id
+             */
+            texturePerObjectIdColorsAndFlags: null,
+            /**
+             * The number of objects stored in `texturePerObjectIdColorsAndFlags`.
+             */
+            texturePerObjectIdColorsAndFlagsHeight: null,
+            /**
+             * Texture that holds the positionsDecodeMatrix per-object:
+             * - columns: each column is one column of the matrix
+             * - row: the object Id
+             */
+             texturePerObjectIdPositionsDecodeMatrix: null,
+            /**
+             * Texture that holds all the `different-vertices` used by the layer.
+             */            
             texturePerVertexIdCoordinates: null,
             texturePerVertexIdCoordinatesHeight: null,
+            /**
+             * Texture that holds the PortionId that corresponds to a given polygon-id.
+             * 
+             * Variant of the texture for 8-bit based polygon-ids.
+             */
+            texturePerPolygonIdPortionIds8Bits: null,
+            /**
+             * Texture that holds the PortionId that corresponds to a given polygon-id.
+             * 
+             * Variant of the texture for 16-bit based polygon-ids.
+             */
+            texturePerPolygonIdPortionIds16Bits: null,
+            /**
+             * Texture that holds the PortionId that corresponds to a given polygon-id.
+             * 
+             * Variant of the texture for 32-bit based polygon-ids.
+             */
+            texturePerPolygonIdPortionIds32Bits: null,
+            /**
+             * Texture that holds the PortionId that corresponds to a given edge-id.
+             * 
+             * Variant of the texture for 8-bit based polygon-ids.
+             */
+            texturePerEdgeIdPortionIds8Bits: null,
+            /**
+             * Texture that holds the PortionId that corresponds to a given edge-id.
+             * 
+             * Variant of the texture for 16-bit based polygon-ids.
+             */
+            texturePerEdgeIdPortionIds16Bits: null,
+            /**
+             * Texture that holds the PortionId that corresponds to a given edge-id.
+             * 
+             * Variant of the texture for 32-bit based polygon-ids.
+             */
+            texturePerEdgeIdPortionIds32Bits: null,
+            /**
+             * Texture that holds the unique-vertex-indices for 8-bit based indices.
+             */            
+            texturePerPolygonIdIndices8Bits: null,
+            /**
+             * Texture that holds the unique-vertex-indices for 16-bit based indices.
+             */            
+            texturePerPolygonIdIndices16Bits: null,
+            /**
+             * Texture that holds the unique-vertex-indices for 32-bit based indices.
+             */            
+            texturePerPolygonIdIndices32Bits: null,
+            /**
+             * Texture that holds the unique-vertex-indices for 8-bit based edge indices.
+             */            
+            texturePerPolygonIdEdgeIndices8Bits: null,
+            /**
+             * Texture that holds the unique-vertex-indices for 16-bit based edge indices.
+             */            
+            texturePerPolygonIdEdgeIndices16Bits: null,
+            /**
+             * Texture that holds the unique-vertex-indices for 32-bit based edge indices.
+             */            
+            texturePerPolygonIdEdgeIndices32Bits: null,
+            /**
+             * Texture that holds the camera matrices
+             * - columns: each column in the texture is a camera matrix column.
+             * - row: each row is a different camera matrix.
+             */
+            textureCameraMatrices: null,
+            /**
+             * Texture that holds the model matrices
+             * - columns: each column in the texture is a model matrix column.
+             * - row: each row is a different model matrix.
+             */
+            textureModelMatrices: null,
             texRR1: {
                 bind: function (unit) {
                     this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
@@ -1071,7 +1153,6 @@ class TrianglesBatchingLayer {
         ); 
 
         state.texturePerObjectIdPositionsDecodeMatrix = decodeMatrixTexture.texture;
-        state.texturePerObjectIdPositionsDecodeMatrixHeight = decodeMatrixTexture.textureHeight;
 
         // c) position coordinates texture
         const texturePerVertexIdCoordinates = this.generateTextureForPositions (
@@ -1080,7 +1161,6 @@ class TrianglesBatchingLayer {
         );
 
         state.texturePerVertexIdCoordinates = texturePerVertexIdCoordinates.texture;
-        state.texturePerVertexIdCoordinatesHeight = texturePerVertexIdCoordinates.textureHeight;
 
         // d) portion Id triangles texture
         const texturePerPolygonIdPortionIds8Bits = this.generateTextureForPackedPortionIds (
@@ -1089,7 +1169,6 @@ class TrianglesBatchingLayer {
         );
 
         state.texturePerPolygonIdPortionIds8Bits = texturePerPolygonIdPortionIds8Bits.texture;
-        state.texturePerPolygonIdPortionIds8BitsHeight = texturePerPolygonIdPortionIds8Bits.textureHeight;
 
         const texturePerPolygonIdPortionIds16Bits = this.generateTextureForPackedPortionIds (
             gl,
@@ -1097,7 +1176,6 @@ class TrianglesBatchingLayer {
         );
 
         state.texturePerPolygonIdPortionIds16Bits = texturePerPolygonIdPortionIds16Bits.texture;
-        state.texturePerPolygonIdPortionIds16BitsHeight = texturePerPolygonIdPortionIds16Bits.textureHeight;
 
         const texturePerPolygonIdPortionIds32Bits = this.generateTextureForPackedPortionIds (
             gl,
@@ -1105,24 +1183,14 @@ class TrianglesBatchingLayer {
         );
 
         state.texturePerPolygonIdPortionIds32Bits = texturePerPolygonIdPortionIds32Bits.texture;
-        state.texturePerPolygonIdPortionIds32BitsHeight = texturePerPolygonIdPortionIds32Bits.textureHeight;
 
         // e) portion Id texture for edges
-        // const texturePerEdgeIdPortionIds = this.generateTextureForPackedPortionIds (
-        //     gl,
-        //     this._portionIdForEdges,
-        // );
-
-        // state.texturePerEdgeIdPortionIds = texturePerEdgeIdPortionIds.texture;
-        // state.texturePerEdgeIdPortionIdsHeight = texturePerEdgeIdPortionIds.textureHeight;
-
         const texturePerEdgeIdPortionIds8Bits = this.generateTextureForPackedPortionIds (
             gl,
             this._portionIdForEdges8Bits
         );
 
         state.texturePerEdgeIdPortionIds8Bits = texturePerEdgeIdPortionIds8Bits.texture;
-        state.texturePerEdgeIdPortionIds8BitsHeight = texturePerEdgeIdPortionIds8Bits.textureHeight;
 
         const texturePerEdgeIdPortionIds16Bits = this.generateTextureForPackedPortionIds (
             gl,
@@ -1130,7 +1198,6 @@ class TrianglesBatchingLayer {
         );
 
         state.texturePerEdgeIdPortionIds16Bits = texturePerEdgeIdPortionIds16Bits.texture;
-        state.texturePerEdgeIdPortionIds16BitsHeight = texturePerEdgeIdPortionIds16Bits.textureHeight;
 
         const texturePerEdgeIdPortionIds32Bits = this.generateTextureForPackedPortionIds (
             gl,
@@ -1138,7 +1205,6 @@ class TrianglesBatchingLayer {
         );
 
         state.texturePerEdgeIdPortionIds32Bits = texturePerEdgeIdPortionIds32Bits.texture;
-        state.texturePerEdgeIdPortionIds32BitsHeight = texturePerEdgeIdPortionIds32Bits.textureHeight;
 
 
         // f) indices texture
@@ -1148,7 +1214,6 @@ class TrianglesBatchingLayer {
         );
 
         state.texturePerPolygonIdIndices8Bits = texturePerPolygonIdIndices8Bits.texture;
-        state.texturePerPolygonIdIndices8BitsHeight = texturePerPolygonIdIndices8Bits.textureHeight;
 
         const texturePerPolygonIdIndices16Bits = this.generateTextureFor16BitIndices (
             gl,
@@ -1156,7 +1221,6 @@ class TrianglesBatchingLayer {
         );
 
         state.texturePerPolygonIdIndices16Bits = texturePerPolygonIdIndices16Bits.texture;
-        state.texturePerPolygonIdIndices16BitsHeight = texturePerPolygonIdIndices16Bits.textureHeight;
 
         const texturePerPolygonIdIndices32Bits = this.generateTextureFor32BitIndices (
             gl,
@@ -1164,7 +1228,6 @@ class TrianglesBatchingLayer {
         );
 
         state.texturePerPolygonIdIndices32Bits = texturePerPolygonIdIndices32Bits.texture;
-        state.texturePerPolygonIdIndices32BitsHeight = texturePerPolygonIdIndices32Bits.textureHeight;
         
         // g) edge indices texture
         const texturePerPolygonIdEdgeIndices8Bits = this.generateTextureFor8BitsEdgeIndices (
@@ -1173,7 +1236,6 @@ class TrianglesBatchingLayer {
         );
 
         state.texturePerPolygonIdEdgeIndices8Bits = texturePerPolygonIdEdgeIndices8Bits.texture;
-        state.texturePerPolygonIdEdgeIndices8BitsHeight = texturePerPolygonIdEdgeIndices8Bits.textureHeight;
         
         const texturePerPolygonIdEdgeIndices16Bits = this.generateTextureFor16BitsEdgeIndices (
             gl,
@@ -1181,7 +1243,6 @@ class TrianglesBatchingLayer {
         );
 
         state.texturePerPolygonIdEdgeIndices16Bits = texturePerPolygonIdEdgeIndices16Bits.texture;
-        state.texturePerPolygonIdEdgeIndices16BitsHeight = texturePerPolygonIdEdgeIndices16Bits.textureHeight;
         
         const texturePerPolygonIdEdgeIndices32Bits = this.generateTextureFor32BitsEdgeIndices (
             gl,
@@ -1189,7 +1250,6 @@ class TrianglesBatchingLayer {
         );
 
         state.texturePerPolygonIdEdgeIndices32Bits = texturePerPolygonIdEdgeIndices32Bits.texture;
-        state.texturePerPolygonIdEdgeIndices32BitsHeight = texturePerPolygonIdEdgeIndices32Bits.textureHeight;
         
         
         // end of chipmunk
@@ -1291,29 +1351,29 @@ class TrianglesBatchingLayer {
             (ramStats.idealIndicesSize + ramStats.idealEdgeIndicesSize)
         );
 
-        console.log (JSON.stringify(ramStats, null, 4));
+        // console.log (JSON.stringify(ramStats, null, 4));
 
-        let totalRamSize = 0;
+        // let totalRamSize = 0;
 
-        Object.keys(ramStats).forEach (key => {
-            if (key.startsWith ("size")) {
-                totalRamSize+=ramStats[key];
-            }
-        });
+        // Object.keys(ramStats).forEach (key => {
+        //     if (key.startsWith ("size")) {
+        //         totalRamSize+=ramStats[key];
+        //     }
+        // });
 
-        console.log (`Total size ${totalRamSize} bytes (${(totalRamSize/1000/1000).toFixed(2)} MB)`);
-        console.log (`Avg bytes / triangle: ${(totalRamSize / ramStats.totalPolygons).toFixed(2)}`);
+        // console.log (`Total size ${totalRamSize} bytes (${(totalRamSize/1000/1000).toFixed(2)} MB)`);
+        // console.log (`Avg bytes / triangle: ${(totalRamSize / ramStats.totalPolygons).toFixed(2)}`);
 
-        let percentualRamStats = {};
+        // let percentualRamStats = {};
 
-        Object.keys(ramStats).forEach (key => {
-            if (key.startsWith ("size")) {
-                percentualRamStats[key] = 
-                    `${(ramStats[key] / totalRamSize * 100).toFixed(2)} % of total`;
-            }
-        });
+        // Object.keys(ramStats).forEach (key => {
+        //     if (key.startsWith ("size")) {
+        //         percentualRamStats[key] = 
+        //             `${(ramStats[key] / totalRamSize * 100).toFixed(2)} % of total`;
+        //     }
+        // });
 
-        console.log (JSON.stringify({percentualRamUsage: percentualRamStats}, null, 4));
+        // console.log (JSON.stringify({percentualRamUsage: percentualRamStats}, null, 4));
 
         this._buffer = null;
         this._finalized = true;
@@ -2456,9 +2516,10 @@ class TrianglesBatchingLayer {
             tempArray[i + 2] = b;
             tempArray[i + 3] = a;
         }
-        if (this._state.colorsBuf) {
-            this._state.colorsBuf.setData(tempArray, firstColor, lenColor);
-        }
+        // TODO: migrate to texture updates
+        // if (this._state.colorsBuf) {
+        //     this._state.colorsBuf.setData(tempArray, firstColor, lenColor);
+        // }
     }
 
     setTransparent(portionId, flags, transparent) {
@@ -2582,11 +2643,6 @@ class TrianglesBatchingLayer {
     }
 
     _setDeferredFlags() {
-        return;
-        if (this._deferredFlagValues) {
-            this._state.flagsBuf.setData(this._deferredFlagValues);
-            this._deferredFlagValues = null;
-        }
     }
 
     _setFlags2(portionId, flags, deferred = false) {
@@ -2641,10 +2697,6 @@ class TrianglesBatchingLayer {
 
     _setDeferredFlags2() {
         return;
-        if (this._setDeferredFlag2Values) {
-            this._state.flags2Buf.setData(this._setDeferredFlag2Values);
-            this._setDeferredFlag2Values = null;
-        }
     }
 
     setOffset(portionId, offset) {
@@ -2688,7 +2740,7 @@ class TrianglesBatchingLayer {
         }
         this._updateBackfaceCull(renderFlags, frameCtx);
         if (frameCtx.withSAO && this.model.saoEnabled) {
-            if (frameCtx.pbrEnabled && this.model.pbrEnabled && this._state.normalsBuf) {
+            if (frameCtx.pbrEnabled && this.model.pbrEnabled) {
                 if (this._batchingRenderers.colorQualityRendererWithSAO) {
                     this._batchingRenderers.colorQualityRendererWithSAO.drawLayer(frameCtx, this, RENDER_PASSES.COLOR_OPAQUE);
                 }
@@ -2698,7 +2750,7 @@ class TrianglesBatchingLayer {
                 }
             }
         } else {
-            if (frameCtx.pbrEnabled && this.model.pbrEnabled && this._state.normalsBuf) {
+            if (frameCtx.pbrEnabled && this.model.pbrEnabled) {
                 if (this._batchingRenderers.colorQualityRenderer) {
                     this._batchingRenderers.colorQualityRenderer.drawLayer(frameCtx, this, RENDER_PASSES.COLOR_OPAQUE);
                 }
@@ -2728,7 +2780,7 @@ class TrianglesBatchingLayer {
             return;
         }
         this._updateBackfaceCull(renderFlags, frameCtx);
-        if (frameCtx.pbrEnabled && this.model.pbrEnabled && this._state.normalsBuf) {
+        if (frameCtx.pbrEnabled && this.model.pbrEnabled) {
             if (this._batchingRenderers.colorQualityRenderer) {
                 this._batchingRenderers.colorQualityRenderer.drawLayer(frameCtx, this, RENDER_PASSES.COLOR_TRANSPARENT);
             }
@@ -2891,14 +2943,8 @@ class TrianglesBatchingLayer {
             return;
         }
         this._updateBackfaceCull(renderFlags, frameCtx);
-        if (this._state.normalsBuf) {
-            if (this._batchingRenderers.pickNormalsRenderer) {
-                this._batchingRenderers.pickNormalsRenderer.drawLayer(frameCtx, this, RENDER_PASSES.PICK);
-            }
-        } else {
-            if (this._batchingRenderers.pickNormalsFlatRenderer) {
-                this._batchingRenderers.pickNormalsFlatRenderer.drawLayer(frameCtx, this, RENDER_PASSES.PICK);
-            }
+        if (this._batchingRenderers.pickNormalsRenderer) {
+            this._batchingRenderers.pickNormalsRenderer.drawLayer(frameCtx, this, RENDER_PASSES.PICK);
         }
     }
 
@@ -3002,45 +3048,13 @@ class TrianglesBatchingLayer {
 
     destroy() {
         const state = this._state;
-        if (state.positionsBuf) {
-            state.positionsBuf.destroy();
-            state.positionsBuf = null;
-        }
         if (state.offsetsBuf) {
             state.offsetsBuf.destroy();
             state.offsetsBuf = null;
         }
-        if (state.normalsBuf) {
-            state.normalsBuf.destroy();
-            state.normalsBuf = null;
-        }
-        if (state.colorsBuf) {
-            state.colorsBuf.destroy();
-            state.colorsBuf = null;
-        }
         if (state.metallicRoughnessBuf) {
             state.metallicRoughnessBuf.destroy();
             state.metallicRoughnessBuf = null;
-        }
-        if (state.flagsBuf) {
-            state.flagsBuf.destroy();
-            state.flagsBuf = null;
-        }
-        if (state.flags2Buf) {
-            state.flags2Buf.destroy();
-            state.flags2Buf = null;
-        }
-        if (state.pickColorsBuf) {
-            state.pickColorsBuf.destroy();
-            state.pickColorsBuf = null;
-        }
-        if (state.indicesBuf) {
-            state.indicesBuf.destroy();
-            state.indicessBuf = null;
-        }
-        if (state.edgeIndicesBuf) {
-            state.edgeIndicesBuf.destroy();
-            state.edgeIndicessBuf = null;
         }
         state.destroy();
     }
