@@ -424,10 +424,11 @@ class TrianglesBatchingLayer {
          */
         this.solid = !!cfg.solid;
 
-        const camera = this.model.scene.camera;
-
         if (!this.model.cameraTexture)
         {
+            const camera = this.model.scene.camera;
+            const scene = this.model.scene;
+
             const gl = this.model.scene.canvas.gl;
             
             const textureWidth = 4;
@@ -455,7 +456,15 @@ class TrianglesBatchingLayer {
 
             const self = this;
 
+            let cameraDirty = true;
+
             const onCameraMatrix = () => {
+                if (!cameraDirty) {
+                    return;
+                }
+
+                cameraDirty = false;
+                
                 gl.bindTexture (gl.TEXTURE_2D, self.model.cameraTexture._texture);
 
                 const origin = self._state.origin;
@@ -500,7 +509,9 @@ class TrianglesBatchingLayer {
                 );
             };
 
-            camera.on ("matrix", onCameraMatrix);
+            camera.on ("matrix", () => cameraDirty = true);
+
+            scene.on ("rendering", onCameraMatrix);
 
             onCameraMatrix ();
         }
