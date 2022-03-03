@@ -474,7 +474,7 @@ class TrianglesBatchingLayer {
                     gl.TEXTURE_2D,
                     0,
                     0,
-                    0,
+                    0, // 1st matrix: camera view matrix
                     4,
                     1,
                     gl.RGBA,
@@ -487,7 +487,7 @@ class TrianglesBatchingLayer {
                     gl.TEXTURE_2D,
                     0,
                     0,
-                    1,
+                    1, // 2nd matrix: camera view normal matrix
                     4,
                     1,
                     gl.RGBA,
@@ -500,7 +500,7 @@ class TrianglesBatchingLayer {
                     gl.TEXTURE_2D,
                     0,
                     0,
-                    2,
+                    2, // 3rd matrix: camera project matrix
                     4,
                     1,
                     gl.RGBA,
