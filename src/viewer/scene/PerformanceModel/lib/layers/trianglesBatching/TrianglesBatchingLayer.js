@@ -255,10 +255,7 @@ class TrianglesBatchingLayer {
         this._buffer = new TrianglesBatchingBuffer(cfg.maxGeometryBatchSize);
         this._scratchMemory = cfg.scratchMemory;
 
-        this._state = new RenderState({
-            offsetsBuf: null,
-            metallicRoughnessBuf: null,
-            positionsDecodeMatrix: math.mat4(),
+        this._dataTextureState = {
             /**
              * Texture that holds colors/pickColors/flags/flags2 per-object:
              * - columns: one concept per column => color / pick-color / ...
@@ -274,7 +271,7 @@ class TrianglesBatchingLayer {
              * - columns: each column is one column of the matrix
              * - row: the object Id
              */
-             texturePerObjectIdPositionsDecodeMatrix: null,
+            texturePerObjectIdPositionsDecodeMatrix: null,
             /**
              * Texture that holds all the `different-vertices` used by the layer.
              */            
@@ -352,210 +349,13 @@ class TrianglesBatchingLayer {
              * - row: each row is a different model matrix.
              */
             textureModelMatrices: null,
-            texRR1: {
-                bind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerObjectIdPositionsDecodeMatrix);
-                    return true;
-                },
-                unbind: function (unit) {
-                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
-                }
-            },
-            texRR2: {
-                bind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerVertexIdCoordinates);
-                    return true;
-                },
-                unbind: function (unit) {
-                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
-                }
-            },
-            texRR3: {
-                bind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerObjectIdColorsAndFlags);
-                    return true;
-                },
-                unbind: function (unit) {
-                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
-                }
-            },
-            trianglesTexRR4_1: {
-                bind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerPolygonIdPortionIds8Bits);
-                    return true;
-                },
-                unbind: function (unit) {
-                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
-                }
-            },
-            trianglesTexRR5_1: {
-                bind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerPolygonIdIndices8Bits);
-                    return true;
-                },
-                unbind: function (unit) {
-                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
-                }
-            },
-            trianglesTexRR4_2: {
-                bind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerPolygonIdPortionIds16Bits);
-                    return true;
-                },
-                unbind: function (unit) {
-                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
-                }
-            },
-            trianglesTexRR5_2: {
-                bind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerPolygonIdIndices16Bits);
-                    return true;
-                },
-                unbind: function (unit) {
-                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
-                }
-            },
-            trianglesTexRR4_3: {
-                bind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerPolygonIdPortionIds32Bits);
-                    return true;
-                },
-                unbind: function (unit) {
-                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
-                }
-            },
-            trianglesTexRR5_3: {
-                bind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, this.state.texturePerPolygonIdIndices32Bits);
-                    return true;
-                },
-                unbind: function (unit) {
-                    // gl.activeTexture(gl["TEXTURE" + unit]);
-                    // gl.bindTexture(gl.TEXTURE_2D, null);
-                }
-            },
-            edgesTexRR4_1: {
-                bind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerEdgeIdPortionIds8Bits);
-                    return true;
-                },
-                unbind: function (unit) {
-                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
-                }
-            },
-            edgesTexRR5_1: {
-                bind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerPolygonIdEdgeIndices8Bits);
-                    return true;
-                },
-                unbind: function (unit) {
-                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
-                }
-            },
-            edgesTexRR4_2: {
-                bind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerEdgeIdPortionIds16Bits);
-                    return true;
-                },
-                unbind: function (unit) {
-                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
-                }
-            },
-            edgesTexRR5_2: {
-                bind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerPolygonIdEdgeIndices16Bits);
-                    return true;
-                },
-                unbind: function (unit) {
-                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
-                }
-            },
-            edgesTexRR4_3: {
-                bind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerEdgeIdPortionIds32Bits);
-                    return true;
-                },
-                unbind: function (unit) {
-                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
-                }
-            },
-            edgesTexRR5_3: {
-                bind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.texturePerPolygonIdEdgeIndices32Bits);
-                    return true;
-                },
-                unbind: function (unit) {
-                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
-                }
-            },
-            texRR6: {
-                informCameraMatrices: function (origin, viewMatrix, viewNormalMatrix, projectMatrix) {
-                    this._origin = origin;
-                    this._viewMatrix = viewMatrix;
-                    this._viewNormalMatrix = viewNormalMatrix;
-                    this._projectMatrix = projectMatrix;
-                },
-                bind: function (unit) {
-                    const texObject = this.state.textureCameraMatrices;
-    
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, texObject.texture);
-    
-                    texObject.ensureCameraMatrices (
-                        this.state.gl,
-                        this._origin,
-                        this._viewMatrix,
-                        this._viewNormalMatrix,
-                        this._projectMatrix
-                    );
-    
-                    return true;
-                },
-                unbind: function (unit) {
-                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
-                }
-            },
-            texRR7: {
-                bind: function (unit) {
-                    this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, this.state.textureModelMatrices);
-                    return true;
-                },
-                unbind: function (unit) {
-                    // this.state.gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                    // this.state.gl.bindTexture(this.state.gl.TEXTURE_2D, null);
-                }
-            },
+        };
+
+        this._state = new RenderState({
+            offsetsBuf: null,
+            metallicRoughnessBuf: null,
+            positionsDecodeMatrix: math.mat4(),
+            textureState: this._dataTextureState,
         });
 
         // These counts are used to avoid unnecessary render passes
@@ -623,6 +423,89 @@ class TrianglesBatchingLayer {
          * @type {boolean}
          */
         this.solid = !!cfg.solid;
+
+        const camera = this.model.scene.camera;
+
+        if (!this.model.cameraTexture)
+        {
+            const gl = this.model.scene.canvas.gl;
+            
+            const textureWidth = 4;
+            const textureHeight = 3; // space for 3 matrices
+
+            const texture = gl.createTexture();
+
+            gl.bindTexture (gl.TEXTURE_2D, texture);
+            
+            gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, textureWidth, textureHeight);
+
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    
+            gl.bindTexture (gl.TEXTURE_2D, null);
+
+            this.model.cameraTexture = this.generateBindableTexture(
+                gl,
+                texture,
+                textureWidth,
+                textureHeight
+            );
+
+            const self = this;
+
+            const onCameraMatrix = () => {
+                gl.bindTexture (gl.TEXTURE_2D, self.model.cameraTexture._texture);
+
+                const origin = self._state.origin;
+
+                // Camera's "view matrix"
+                gl.texSubImage2D(
+                    gl.TEXTURE_2D,
+                    0,
+                    0,
+                    0,
+                    4,
+                    1,
+                    gl.RGBA,
+                    gl.FLOAT,
+                    new Float32Array ((origin) ? createRTCViewMat(camera.viewMatrix, origin) : camera.viewMatrix)
+                );
+    
+                // Camera's "view normal matrix"
+                gl.texSubImage2D(
+                    gl.TEXTURE_2D,
+                    0,
+                    0,
+                    1,
+                    4,
+                    1,
+                    gl.RGBA,
+                    gl.FLOAT,
+                    new Float32Array (camera.viewNormalMatrix)
+                );
+
+                // Camera's "project matrix"
+                gl.texSubImage2D(
+                    gl.TEXTURE_2D,
+                    0,
+                    0,
+                    2,
+                    4,
+                    1,
+                    gl.RGBA,
+                    gl.FLOAT,
+                    new Float32Array (camera.project.matrix)
+                );
+            };
+
+            camera.on ("matrix", onCameraMatrix);
+
+            onCameraMatrix ();
+        }
+
+        this._dataTextureState.textureCameraMatrices = this.model.cameraTexture;
     }
 
     /**
@@ -1108,149 +991,97 @@ class TrianglesBatchingLayer {
         }
 
         const state = this._state;
+        const textureState = this._dataTextureState;
         const gl = this.model.scene.canvas.gl;
         const buffer = this._buffer;
 
         state.gl = gl;
-        state.texRR1.state = state;
-        state.texRR2.state = state;
-        state.texRR3.state = state;
-        state.trianglesTexRR4_1.state = state;
-        state.trianglesTexRR5_1.state = state;
-        state.trianglesTexRR4_2.state = state;
-        state.trianglesTexRR5_2.state = state;
-        state.trianglesTexRR4_3.state = state;
-        state.trianglesTexRR5_3.state = state;
-        state.edgesTexRR4_1.state = state;
-        state.edgesTexRR5_1.state = state;
-        state.edgesTexRR4_2.state = state;
-        state.edgesTexRR5_2.state = state;
-        state.edgesTexRR4_3.state = state;
-        state.edgesTexRR5_3.state = state;
-        state.texRR3.state = state;
-        state.texRR6.state = state;
-        state.texRR7.state = state;
 
         // Generate all the needed textures in the layer
 
         // a) colors and flags texture
-        const colorsAndFlagsTexture = this.generateTextureForColorsAndFlags (
+        textureState.texturePerObjectIdColorsAndFlags = this.generateTextureForColorsAndFlags (
             gl,
             this._objectDataColors,
             this._objectDataPickColors,
             this._vertexBasesForObject
         );
 
-        state.texturePerObjectIdColorsAndFlags = colorsAndFlagsTexture.texture;
-        state.texturePerObjectIdColorsAndFlagsHeight = colorsAndFlagsTexture.textureHeight;
-        state.texturePerObjectIdColorsAndFlagsWidth = colorsAndFlagsTexture.textureWidth;
-        state.texturePerObjectIdColorsAndFlagsData = colorsAndFlagsTexture.texArray;
-
         // b) positions decode matrices texture
-        const decodeMatrixTexture = this.generateTextureForPositionsDecodeMatrices (
+        textureState.texturePerObjectIdPositionsDecodeMatrix = this.generateTextureForPositionsDecodeMatrices (
             gl,
             this._objectDataPositionsMatrices
         ); 
 
-        state.texturePerObjectIdPositionsDecodeMatrix = decodeMatrixTexture.texture;
-
         // c) position coordinates texture
-        const texturePerVertexIdCoordinates = this.generateTextureForPositions (
+        textureState.texturePerVertexIdCoordinates = this.generateTextureForPositions (
             gl,
             buffer.positions
         );
 
-        state.texturePerVertexIdCoordinates = texturePerVertexIdCoordinates.texture;
-
         // d) portion Id triangles texture
-        const texturePerPolygonIdPortionIds8Bits = this.generateTextureForPackedPortionIds (
+        textureState.texturePerPolygonIdPortionIds8Bits = this.generateTextureForPackedPortionIds (
             gl,
             this._portionIdForIndices8Bits
         );
 
-        state.texturePerPolygonIdPortionIds8Bits = texturePerPolygonIdPortionIds8Bits.texture;
-
-        const texturePerPolygonIdPortionIds16Bits = this.generateTextureForPackedPortionIds (
+        textureState.texturePerPolygonIdPortionIds16Bits = this.generateTextureForPackedPortionIds (
             gl,
             this._portionIdForIndices16Bits
         );
 
-        state.texturePerPolygonIdPortionIds16Bits = texturePerPolygonIdPortionIds16Bits.texture;
-
-        const texturePerPolygonIdPortionIds32Bits = this.generateTextureForPackedPortionIds (
+        textureState.texturePerPolygonIdPortionIds32Bits = this.generateTextureForPackedPortionIds (
             gl,
             this._portionIdForIndices32Bits
         );
 
-        state.texturePerPolygonIdPortionIds32Bits = texturePerPolygonIdPortionIds32Bits.texture;
-
         // e) portion Id texture for edges
-        const texturePerEdgeIdPortionIds8Bits = this.generateTextureForPackedPortionIds (
+        textureState.texturePerEdgeIdPortionIds8Bits = this.generateTextureForPackedPortionIds (
             gl,
             this._portionIdForEdges8Bits
         );
 
-        state.texturePerEdgeIdPortionIds8Bits = texturePerEdgeIdPortionIds8Bits.texture;
-
-        const texturePerEdgeIdPortionIds16Bits = this.generateTextureForPackedPortionIds (
+        textureState.texturePerEdgeIdPortionIds16Bits = this.generateTextureForPackedPortionIds (
             gl,
             this._portionIdForEdges16Bits
         );
 
-        state.texturePerEdgeIdPortionIds16Bits = texturePerEdgeIdPortionIds16Bits.texture;
-
-        const texturePerEdgeIdPortionIds32Bits = this.generateTextureForPackedPortionIds (
+        textureState.texturePerEdgeIdPortionIds32Bits = this.generateTextureForPackedPortionIds (
             gl,
             this._portionIdForEdges32Bits
         );
 
-        state.texturePerEdgeIdPortionIds32Bits = texturePerEdgeIdPortionIds32Bits.texture;
-
-
         // f) indices texture
-        const texturePerPolygonIdIndices8Bits = this.generateTextureFor8BitIndices (
+        textureState.texturePerPolygonIdIndices8Bits = this.generateTextureFor8BitIndices (
             gl,
             buffer.indices8Bits
         );
 
-        state.texturePerPolygonIdIndices8Bits = texturePerPolygonIdIndices8Bits.texture;
-
-        const texturePerPolygonIdIndices16Bits = this.generateTextureFor16BitIndices (
+        textureState.texturePerPolygonIdIndices16Bits = this.generateTextureFor16BitIndices (
             gl,
             buffer.indices16Bits
         );
 
-        state.texturePerPolygonIdIndices16Bits = texturePerPolygonIdIndices16Bits.texture;
-
-        const texturePerPolygonIdIndices32Bits = this.generateTextureFor32BitIndices (
+        textureState.texturePerPolygonIdIndices32Bits = this.generateTextureFor32BitIndices (
             gl,
             buffer.indices32Bits
         );
-
-        state.texturePerPolygonIdIndices32Bits = texturePerPolygonIdIndices32Bits.texture;
         
         // g) edge indices texture
-        const texturePerPolygonIdEdgeIndices8Bits = this.generateTextureFor8BitsEdgeIndices (
+        textureState.texturePerPolygonIdEdgeIndices8Bits = this.generateTextureFor8BitsEdgeIndices (
             gl,
             buffer.edgeIndices8Bits
         );
-
-        state.texturePerPolygonIdEdgeIndices8Bits = texturePerPolygonIdEdgeIndices8Bits.texture;
         
-        const texturePerPolygonIdEdgeIndices16Bits = this.generateTextureFor16BitsEdgeIndices (
+        textureState.texturePerPolygonIdEdgeIndices16Bits = this.generateTextureFor16BitsEdgeIndices (
             gl,
             buffer.edgeIndices16Bits
         );
-
-        state.texturePerPolygonIdEdgeIndices16Bits = texturePerPolygonIdEdgeIndices16Bits.texture;
         
-        const texturePerPolygonIdEdgeIndices32Bits = this.generateTextureFor32BitsEdgeIndices (
+        textureState.texturePerPolygonIdEdgeIndices32Bits = this.generateTextureFor32BitsEdgeIndices (
             gl,
             buffer.edgeIndices32Bits
         );
-
-        state.texturePerPolygonIdEdgeIndices32Bits = texturePerPolygonIdEdgeIndices32Bits.texture;
-        
         
         // end of chipmunk
 
@@ -1275,30 +1106,6 @@ class TrianglesBatchingLayer {
         state.numEdgeIndices16Bits = buffer.edgeIndices16Bits.length;
         state.numEdgeIndices32Bits = buffer.edgeIndices32Bits.length;
 
-        // Camera matrices texture
-        if (null == textureCameraMatrices.texture)
-        {
-            const textureWidth = 4;
-            const textureHeight = 3; // space for 3 matrices
-
-            const texture = gl.createTexture();
-
-            gl.bindTexture (gl.TEXTURE_2D, texture);
-            
-            gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, textureWidth, textureHeight);
-
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    
-            gl.bindTexture (gl.TEXTURE_2D, null);
-
-            textureCameraMatrices.texture = texture;
-        }
-
-        state.textureCameraMatrices = textureCameraMatrices;
-
         // Model matrices texture
         if (!this.model._modelMatricesTexture)
         {
@@ -1322,6 +1129,7 @@ class TrianglesBatchingLayer {
                 gl.FLOAT,
                 new Float32Array (this.model.worldMatrix.slice ())
             );
+
             gl.texSubImage2D(
                 gl.TEXTURE_2D,
                 0,
@@ -1341,10 +1149,15 @@ class TrianglesBatchingLayer {
     
             gl.bindTexture (gl.TEXTURE_2D, null);
 
-            this.model._modelMatricesTexture = texture;
+            this.model._modelMatricesTexture = this.generateBindableTexture(
+                gl,
+                texture,
+                textureWidth,
+                textureHeight
+            );
         }
 
-        state.textureModelMatrices = this.model._modelMatricesTexture;
+        textureState.textureModelMatrices = this.model._modelMatricesTexture;
 
         ramStats.additionalTheoreticalOptimalIndicesSavings = Math.round (
             (ramStats.sizeDataTextureIndices + ramStats.sizeDataTextureEdgeIndices) -
@@ -1379,6 +1192,63 @@ class TrianglesBatchingLayer {
         this._finalized = true;
 
         _lastCanCreatePortion.buckets = null;
+    }
+
+    generateBindableTexture (gl, texture, textureWidth, textureHeight, textureData = null)
+    {
+        return {
+            /**
+             * The WebGLRenderingContext.
+             * @private
+             */
+            _gl: gl,
+            /**
+             * The WebGLTexture handle.
+             * @private
+             */
+            _texture: texture,
+            /**
+             * The texture width.
+             * @private
+             */
+            _textureWidth: textureWidth,
+            /**
+             * The texture height.
+             * @private
+             */
+            _textureHeight: textureHeight,
+            /**
+             * Then the texture data array is kept in the JS side, it will be stored here.
+             * @private
+             */
+            _textureData: textureData,
+            /**
+             * Convenience method to be used by the renderers to bind the texture before draw calls.
+             * @public
+             */
+            bindTexture: function (glProgram, shaderName, glTextureUnit) {
+                return glProgram.bindTexture (shaderName, this, glTextureUnit);
+            },
+            /**
+             * Used internally by the `program` passed to `bindTexture` in order to bind the texture to an active `texture-unit`.
+             * @private
+             */
+            bind: function (unit) {
+                this._gl.activeTexture(this._gl["TEXTURE" + unit]);
+                this._gl.bindTexture(this._gl.TEXTURE_2D, this._texture);
+                return true;
+            },
+            /**
+             * Used internally by the `program` passed to `bindTexture` in order to bind the texture to an active `texture-unit`.
+             * @private
+             */
+            unbind: function (unit) {
+                // This `unbind` method is ignored at the moment to allow avoiding to rebind same texture already bound to a texture unit.
+
+                // this._gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+                // this._gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+            }
+        };
     }
 
     /**
@@ -1488,12 +1358,13 @@ class TrianglesBatchingLayer {
 
         gl.bindTexture(gl.TEXTURE_2D, null);
 
-        return {
+        return this.generateBindableTexture(
+            gl,
             texture,
-            textureHeight,
             textureWidth,
+            textureHeight,
             texArray
-        };
+        );
     }
 
     /**
@@ -1551,19 +1422,6 @@ class TrianglesBatchingLayer {
             0
         );
 
-        // gl.texImage2D (
-        //     gl.TEXTURE_2D,
-        //     0,
-        //     gl.RGBA16F,
-        //     textureWidth,
-        //     textureHeight,
-        //     0,
-        //     gl.RGBA,
-        //     gl.HALF_FLOAT,
-        //     new Uint16Array (texArray.buffer),
-        //     0
-        // );
-
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
@@ -1571,70 +1429,13 @@ class TrianglesBatchingLayer {
 
         gl.bindTexture(gl.TEXTURE_2D, null);
 
-        return {
+        return this.generateBindableTexture(
+            gl,
             texture,
+            textureWidth,
             textureHeight
-        };
+        );
     }
-
-    // /**
-    //  * TODO: document
-    //  */
-    // generateTextureForIndices (gl, indices) {
-    //     const textureWidth = 512;
-    //     const textureHeight = Math.ceil (indices.length / 3 / textureWidth);
-
-    //     const texArraySize = textureWidth * textureHeight * 3;
-    //     const texArray = new Uint16Array (texArraySize);
-
-    //     ramStats.sizeDataTextureIndices +=texArray.byteLength;
-
-    //     texArray.fill(0);
-    //     texArray.set(indices, 0)
-
-    //     const texture = gl.createTexture();
-
-    //     gl.bindTexture (gl.TEXTURE_2D, texture);
-
-    //     gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGB16UI, textureWidth, textureHeight);
-
-    //     gl.texSubImage2D(
-    //         gl.TEXTURE_2D,
-    //         0,
-    //         0,
-    //         0,
-    //         textureWidth,
-    //         textureHeight,
-    //         gl.RGB_INTEGER,
-    //         gl.UNSIGNED_SHORT,
-    //         texArray,
-    //         0
-    //     );
-
-    //     // gl.texImage2D (
-    //     //     gl.TEXTURE_2D,
-    //     //     0,
-    //     //     gl.RGB16UI,
-    //     //     textureWidth,
-    //     //     textureHeight,
-    //     //     0,
-    //     //     gl.RGB_INTEGER,
-    //     //     gl.UNSIGNED_SHORT,
-    //     //     texArray
-    //     // );
-
-    //     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    //     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    //     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    //     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-    //     gl.bindTexture(gl.TEXTURE_2D, null);
-
-    //     return {
-    //         texture,
-    //         textureHeight
-    //     };
-    // }
 
     /**
      * TODO: document
@@ -1682,18 +1483,6 @@ class TrianglesBatchingLayer {
             0
         );
 
-        // gl.texImage2D (
-        //     gl.TEXTURE_2D,
-        //     0,
-        //     gl.RGB16UI,
-        //     textureWidth,
-        //     textureHeight,
-        //     0,
-        //     gl.RGB_INTEGER,
-        //     gl.UNSIGNED_SHORT,
-        //     texArray
-        // );
-
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -1701,10 +1490,12 @@ class TrianglesBatchingLayer {
 
         gl.bindTexture(gl.TEXTURE_2D, null);
 
-        return {
+        return this.generateBindableTexture(
+            gl,
             texture,
+            textureWidth,
             textureHeight
-        };
+        );
     }
 
     /**
@@ -1752,18 +1543,6 @@ class TrianglesBatchingLayer {
             0
         );
 
-        // gl.texImage2D (
-        //     gl.TEXTURE_2D,
-        //     0,
-        //     gl.RGB16UI,
-        //     textureWidth,
-        //     textureHeight,
-        //     0,
-        //     gl.RGB_INTEGER,
-        //     gl.UNSIGNED_SHORT,
-        //     texArray
-        // );
-
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -1771,10 +1550,12 @@ class TrianglesBatchingLayer {
 
         gl.bindTexture(gl.TEXTURE_2D, null);
 
-        return {
+        return this.generateBindableTexture(
+            gl,
             texture,
+            textureWidth,
             textureHeight
-        };
+        );
     }
 
     /**
@@ -1823,18 +1604,6 @@ class TrianglesBatchingLayer {
             0
         );
 
-        // gl.texImage2D (
-        //     gl.TEXTURE_2D,
-        //     0,
-        //     gl.RGB16UI,
-        //     textureWidth,
-        //     textureHeight,
-        //     0,
-        //     gl.RGB_INTEGER,
-        //     gl.UNSIGNED_SHORT,
-        //     texArray
-        // );
-
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -1842,70 +1611,13 @@ class TrianglesBatchingLayer {
 
         gl.bindTexture(gl.TEXTURE_2D, null);
 
-        return {
+        return this.generateBindableTexture(
+            gl,
             texture,
+            textureWidth,
             textureHeight
-        };
+        );
     }
-
-    // /**
-    //  * TODO: comment
-    //  */
-    // generateTextureForEdgeIndices (gl, edgeIndices) {
-    //     const textureWidth = 512;
-    //     const textureHeight = Math.ceil (edgeIndices.length / 2 / textureWidth);
-
-    //     const texArraySize = textureWidth * textureHeight * 2;
-    //     const texArray = new Uint16Array (texArraySize);
-
-    //     ramStats.sizeDataTextureEdgeIndices +=texArray.byteLength;
-
-    //     texArray.fill(0);
-    //     texArray.set(edgeIndices, 0)
-
-    //     const texture = gl.createTexture();
-
-    //     gl.bindTexture (gl.TEXTURE_2D, texture);
-
-    //     gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RG16UI, textureWidth, textureHeight);
-
-    //     gl.texSubImage2D(
-    //         gl.TEXTURE_2D,
-    //         0,
-    //         0,
-    //         0,
-    //         textureWidth,
-    //         textureHeight,
-    //         gl.RG_INTEGER,
-    //         gl.UNSIGNED_SHORT,
-    //         texArray,
-    //         0
-    //     );
-
-    //     // gl.texImage2D (
-    //     //     gl.TEXTURE_2D,
-    //     //     0,
-    //     //     gl.RGB16UI,
-    //     //     textureWidth,
-    //     //     textureHeight,
-    //     //     0,
-    //     //     gl.RGB_INTEGER,
-    //     //     gl.UNSIGNED_SHORT,
-    //     //     texArray
-    //     // );
-
-    //     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    //     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    //     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    //     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-    //     gl.bindTexture(gl.TEXTURE_2D, null);
-
-    //     return {
-    //         texture,
-    //         textureHeight
-    //     };
-    // }
 
     /**
      * TODO: comment
@@ -1953,18 +1665,6 @@ class TrianglesBatchingLayer {
             0
         );
 
-        // gl.texImage2D (
-        //     gl.TEXTURE_2D,
-        //     0,
-        //     gl.RG16UI,
-        //     textureWidth,
-        //     textureHeight,
-        //     0,
-        //     gl.RG_INTEGER,
-        //     gl.UNSIGNED_SHORT,
-        //     texArray
-        // );
-
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -1972,10 +1672,12 @@ class TrianglesBatchingLayer {
 
         gl.bindTexture(gl.TEXTURE_2D, null);
 
-        return {
+        return this.generateBindableTexture(
+            gl,
             texture,
+            textureWidth,
             textureHeight
-        };
+        );
     }
 
     /**
@@ -2024,18 +1726,6 @@ class TrianglesBatchingLayer {
             0
         );
 
-        // gl.texImage2D (
-        //     gl.TEXTURE_2D,
-        //     0,
-        //     gl.RG16UI,
-        //     textureWidth,
-        //     textureHeight,
-        //     0,
-        //     gl.RG_INTEGER,
-        //     gl.UNSIGNED_SHORT,
-        //     texArray
-        // );
-
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -2043,10 +1733,12 @@ class TrianglesBatchingLayer {
 
         gl.bindTexture(gl.TEXTURE_2D, null);
 
-        return {
+        return this.generateBindableTexture(
+            gl,
             texture,
+            textureWidth,
             textureHeight
-        };
+        );
     }
 
     /**
@@ -2095,18 +1787,6 @@ class TrianglesBatchingLayer {
             0
         );
 
-        // gl.texImage2D (
-        //     gl.TEXTURE_2D,
-        //     0,
-        //     gl.RG16UI,
-        //     textureWidth,
-        //     textureHeight,
-        //     0,
-        //     gl.RG_INTEGER,
-        //     gl.UNSIGNED_SHORT,
-        //     texArray
-        // );
-
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -2114,10 +1794,12 @@ class TrianglesBatchingLayer {
 
         gl.bindTexture(gl.TEXTURE_2D, null);
 
-        return {
+        return this.generateBindableTexture(
+            gl,
             texture,
+            textureWidth,
             textureHeight
-        };
+        );
     }
 
     /**
@@ -2170,18 +1852,6 @@ class TrianglesBatchingLayer {
             0
         );
 
-        // gl.texImage2D (
-        //     gl.TEXTURE_2D,
-        //     0,
-        //     gl.RGB16UI,
-        //     textureWidth,
-        //     textureHeight,
-        //     0,
-        //     gl.RGB_INTEGER,
-        //     gl.UNSIGNED_SHORT,
-        //     texArray    
-        // );
-
         gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
@@ -2189,10 +1859,12 @@ class TrianglesBatchingLayer {
 
         gl.bindTexture(gl.TEXTURE_2D, null);
 
-        return {
+        return this.generateBindableTexture(
+            gl,
             texture,
+            textureWidth,
             textureHeight
-        };
+        );
     }
 
     /**
@@ -2245,18 +1917,6 @@ class TrianglesBatchingLayer {
             0
         );
 
-        // gl.texImage2D (
-        //     gl.TEXTURE_2D,
-        //     0,
-        //     gl.RGB8UI,
-        //     textureWidth,
-        //     textureHeight,
-        //     0,
-        //     gl.RGB_INTEGER,
-        //     gl.UNSIGNED_BYTE,
-        //     texArray
-        // );
-
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
@@ -2264,10 +1924,12 @@ class TrianglesBatchingLayer {
 
         gl.bindTexture(gl.TEXTURE_2D, null);
 
-        return {
+        return this.generateBindableTexture(
+            gl,
             texture,
+            textureWidth,
             textureHeight
-        };
+        );
     }
         
     isEmpty() {
@@ -2443,20 +2105,20 @@ class TrianglesBatchingLayer {
         this._deferredSetFlagsDirty = false;
 
         const gl = this.model.scene.canvas.gl;
-        const state = this._state;
+        const textureState = this._dataTextureState;
         
-        gl.bindTexture (gl.TEXTURE_2D, state.texturePerObjectIdColorsAndFlags);
+        gl.bindTexture (gl.TEXTURE_2D, textureState.texturePerObjectIdColorsAndFlags._texture);
 
         gl.texSubImage2D(
             gl.TEXTURE_2D,
             0, // level
             0, // xoffset
             0, // yoffset
-            state.texturePerObjectIdColorsAndFlagsWidth, // width
-            state.texturePerObjectIdColorsAndFlagsHeight, //height
+            textureState.texturePerObjectIdColorsAndFlags._textureWidth, // width
+            textureState.texturePerObjectIdColorsAndFlags._textureHeight, // width
             gl.RGBA_INTEGER,
             gl.UNSIGNED_BYTE,
-            state.texturePerObjectIdColorsAndFlagsData
+            textureState.texturePerObjectIdColorsAndFlags._textureData
         );
     }
 
@@ -2605,7 +2267,7 @@ class TrianglesBatchingLayer {
 
         let f3 = (visible && !culled && pickable) ? RENDER_PASSES.PICK : RENDER_PASSES.NOT_RENDERED;
 
-        const state = this._state;
+        const textureState = this._dataTextureState;
         const gl = this.model.scene.canvas.gl;
 
         tempUint8Array4 [0] = f0;
@@ -2614,7 +2276,7 @@ class TrianglesBatchingLayer {
         tempUint8Array4 [3] = f3;
 
         // object flags
-        state.texturePerObjectIdColorsAndFlagsData.set (
+        textureState.texturePerObjectIdColorsAndFlags._textureData.set (
             tempUint8Array4,
             portionId * 24 + 8
         );
@@ -2625,13 +2287,13 @@ class TrianglesBatchingLayer {
             return;
         }
 
-        gl.bindTexture (gl.TEXTURE_2D, state.texturePerObjectIdColorsAndFlags);
+        gl.bindTexture (gl.TEXTURE_2D, textureState.texturePerObjectIdColorsAndFlags._texture);
 
         gl.texSubImage2D(
             gl.TEXTURE_2D,
             0, // level
             2, // xoffset
-            portionId,
+            portionId, // yoffset
             1, // width
             1, //height
             gl.RGBA_INTEGER,
@@ -2658,7 +2320,7 @@ class TrianglesBatchingLayer {
 
         const clippable = !!(flags & ENTITY_FLAGS.CLIPPABLE) ? 255 : 0;
 
-        const state = this._state;
+        const textureState = this._dataTextureState;
         const gl = this.model.scene.canvas.gl;
 
         tempUint8Array4 [0] = clippable;
@@ -2667,7 +2329,7 @@ class TrianglesBatchingLayer {
         tempUint8Array4 [3] = 2;
 
         // object flags2
-        state.texturePerObjectIdColorsAndFlagsData.set (
+        textureState.texturePerObjectIdColorsAndFlags._textureData.set (
             tempUint8Array4,
             portionId * 24 + 12
         );
@@ -2678,7 +2340,7 @@ class TrianglesBatchingLayer {
             return;
         }
         
-        gl.bindTexture (gl.TEXTURE_2D, state.texturePerObjectIdColorsAndFlags);
+        gl.bindTexture (gl.TEXTURE_2D, textureState.texturePerObjectIdColorsAndFlags._texture);
 
         gl.texSubImage2D(
             gl.TEXTURE_2D,
