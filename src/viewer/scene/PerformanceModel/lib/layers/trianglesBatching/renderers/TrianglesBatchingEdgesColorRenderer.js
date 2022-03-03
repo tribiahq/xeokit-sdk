@@ -30,6 +30,7 @@ class TrianglesBatchingEdgesColorRenderer {
         const camera = scene.camera;
         const gl = scene.canvas.gl;
         const state = batchingLayer._state;
+        const textureState = state.textureState;
         const origin = batchingLayer._state.origin;
         
         if (!this._program) {
@@ -44,42 +45,35 @@ class TrianglesBatchingEdgesColorRenderer {
             this._bindProgram();
         }
         
-        var rr1 = this._program.bindTexture(
+        textureState.texturePerObjectIdPositionsDecodeMatrix.bindTexture (
+            this._program,
             this._uTexturePerObjectIdPositionsDecodeMatrix, 
-            state.texRR1,
             1
-        ); // chipmunk
-
-        var rr2 = this._program.bindTexture(
-            this._uTexturePerVertexIdCoordinates, 
-            state.texRR2,
-            2
-        ); // chipmunk
-
-        var rr3 = this._program.bindTexture(
-            this._uTexturePerObjectIdColorsAndFlags,
-            state.texRR3,
-            3
-        ); // chipmunk
-
-        state.texRR6.informCameraMatrices (
-            origin,
-            camera.viewMatrix,
-            camera.viewNormalMatrix,
-            camera.project.matrix
         );
-        
-        var rr6 = this._program.bindTexture(
-            this._uTextureCameraMatrices,
-            state.texRR6,
-            6
-        ); // chipmunk
 
-        var rr7 = this._program.bindTexture(
-            this._uTextureModelMatrices,
-            state.texRR7,
+        textureState.texturePerVertexIdCoordinates.bindTexture (
+            this._program,
+            this._uTexturePerVertexIdCoordinates, 
+            2
+        );
+                
+        textureState.texturePerObjectIdColorsAndFlags.bindTexture (
+            this._program,
+            this._uTexturePerObjectIdColorsAndFlags, 
+            3
+        );
+
+        textureState.textureCameraMatrices.bindTexture (
+            this._program,
+            this._uTextureCameraMatrices, 
+            6
+        );
+
+        textureState.textureModelMatrices.bindTexture (
+            this._program,
+            this._uTextureModelMatrices, 
             7
-        ); // chipmunk
+        );
 
         gl.uniform1i(this._uRenderPass, renderPass);
 
@@ -108,58 +102,57 @@ class TrianglesBatchingEdgesColorRenderer {
         }
 
         if (state.numEdgeIndices8Bits > 0) {
-            var rr4 = this._program.bindTexture(
+            textureState.texturePerEdgeIdPortionIds8Bits.bindTexture (
+                this._program,
                 this._uTexturePerEdgeIdPortionIds, 
-                state.edgesTexRR4_1,
                 4
-            ); // chipmunk
+            );
     
-            var rr5 = this._program.bindTexture(
+            textureState.texturePerPolygonIdEdgeIndices8Bits.bindTexture (
+                this._program,
                 this._uTexturePerPolygonIdEdgeIndices, 
-                state.edgesTexRR5_1,
                 5
-            ); // chipmunk
+            );
 
             gl.drawArrays(gl.LINES, 0, state.numEdgeIndices8Bits);
         }
 
         if (state.numEdgeIndices16Bits > 0) {
-            var rr4 = this._program.bindTexture(
+            textureState.texturePerEdgeIdPortionIds16Bits.bindTexture (
+                this._program,
                 this._uTexturePerEdgeIdPortionIds, 
-                state.edgesTexRR4_2,
                 4
-            ); // chipmunk
+            );
     
-            var rr5 = this._program.bindTexture(
+            textureState.texturePerPolygonIdEdgeIndices16Bits.bindTexture (
+                this._program,
                 this._uTexturePerPolygonIdEdgeIndices, 
-                state.edgesTexRR5_2,
                 5
-            ); // chipmunk
+            );
 
             gl.drawArrays(gl.LINES, 0, state.numEdgeIndices16Bits);
         }
 
         if (state.numEdgeIndices32Bits > 0) {
-            var rr4 = this._program.bindTexture(
+            textureState.texturePerEdgeIdPortionIds32Bits.bindTexture (
+                this._program,
                 this._uTexturePerEdgeIdPortionIds, 
-                state.edgesTexRR4_3,
                 4
-            ); // chipmunk
+            );
     
-            var rr5 = this._program.bindTexture(
+            textureState.texturePerPolygonIdEdgeIndices32Bits.bindTexture (
+                this._program,
                 this._uTexturePerPolygonIdEdgeIndices, 
-                state.edgesTexRR5_3,
                 5
-            ); // chipmunk
+            );
 
             gl.drawArrays(gl.LINES, 0, state.numEdgeIndices32Bits);
         }
 
-        frameCtx.drawElements++;
-
         // gl.flush ();
         // gl.finish ();
 
+        frameCtx.drawElements++;
     }
 
     _allocate() {

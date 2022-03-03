@@ -33,6 +33,7 @@ class TrianglesBatchingColorRenderer {
         const model = batchingLayer.model;
         const gl = scene.canvas.gl;
         const state = batchingLayer._state;
+        const textureState = state.textureState;
         const origin = batchingLayer._state.origin;
 
         if (!this._program) {
@@ -47,42 +48,35 @@ class TrianglesBatchingColorRenderer {
             this._bindProgram(frameCtx, state);
         }
         
-        var rr1 = this._program.bindTexture(
+        textureState.texturePerObjectIdPositionsDecodeMatrix.bindTexture (
+            this._program,
             this._uTexturePerObjectIdPositionsDecodeMatrix, 
-            state.texRR1,
             1
-        ); // chipmunk
-
-        var rr2 = this._program.bindTexture(
-            this._uTexturePerVertexIdCoordinates, 
-            state.texRR2,
-            2
-        ); // chipmunk
-
-        var rr3 = this._program.bindTexture(
-            this._uTexturePerObjectIdColorsAndFlags,
-            state.texRR3,
-            3
-        ); // chipmunk
-
-        state.texRR6.informCameraMatrices (
-            origin,
-            camera.viewMatrix,
-            camera.viewNormalMatrix,
-            camera.project.matrix
         );
-        
-        var rr6 = this._program.bindTexture(
-            this._uTextureCameraMatrices,
-            state.texRR6,
-            6
-        ); // chipmunk
 
-        var rr7 = this._program.bindTexture(
-            this._uTextureModelMatrices,
-            state.texRR7,
+        textureState.texturePerVertexIdCoordinates.bindTexture (
+            this._program,
+            this._uTexturePerVertexIdCoordinates, 
+            2
+        );
+                
+        textureState.texturePerObjectIdColorsAndFlags.bindTexture (
+            this._program,
+            this._uTexturePerObjectIdColorsAndFlags, 
+            3
+        );
+
+        textureState.textureCameraMatrices.bindTexture (
+            this._program,
+            this._uTextureCameraMatrices, 
+            6
+        );
+
+        textureState.textureModelMatrices.bindTexture (
+            this._program,
+            this._uTextureModelMatrices, 
             7
-        ); // chipmunk
+        );
 
         gl.uniform1i(this._uRenderPass, renderPass);
 
@@ -111,49 +105,49 @@ class TrianglesBatchingColorRenderer {
         }
 
         if (state.numIndices8Bits > 0) {
-            var rr4 = this._program.bindTexture(
+            textureState.texturePerPolygonIdPortionIds8Bits.bindTexture (
+                this._program,
                 this._uTexturePerPolygonIdPortionIds, 
-                state.trianglesTexRR4_1,
                 4
-            ); // chipmunk
+            );    
     
-            var rr5 = this._program.bindTexture(
+            textureState.texturePerPolygonIdIndices8Bits.bindTexture (
+                this._program,
                 this._uTexturePerPolygonIdIndices, 
-                state.trianglesTexRR5_1,
                 5
-            ); // chipmunk
+            );
 
             gl.drawArrays(gl.TRIANGLES, 0, state.numIndices8Bits);
         }
 
         if (state.numIndices16Bits > 0) {
-            var rr4 = this._program.bindTexture(
+            textureState.texturePerPolygonIdPortionIds16Bits.bindTexture (
+                this._program,
                 this._uTexturePerPolygonIdPortionIds, 
-                state.trianglesTexRR4_2,
                 4
-            ); // chipmunk
+            );    
     
-            var rr5 = this._program.bindTexture(
+            textureState.texturePerPolygonIdIndices16Bits.bindTexture (
+                this._program,
                 this._uTexturePerPolygonIdIndices, 
-                state.trianglesTexRR5_2,
                 5
-            ); // chipmunk
+            );
 
             gl.drawArrays(gl.TRIANGLES, 0, state.numIndices16Bits);
         }
         
         if (state.numIndices32Bits > 0) {
-            var rr4 = this._program.bindTexture(
+            textureState.texturePerPolygonIdPortionIds32Bits.bindTexture (
+                this._program,
                 this._uTexturePerPolygonIdPortionIds, 
-                state.trianglesTexRR4_3,
                 4
-            ); // chipmunk
+            );    
     
-            var rr5 = this._program.bindTexture(
+            textureState.texturePerPolygonIdIndices32Bits.bindTexture (
+                this._program,
                 this._uTexturePerPolygonIdIndices, 
-                state.trianglesTexRR5_3,
                 5
-            ); // chipmunk
+            );
 
             gl.drawArrays(gl.TRIANGLES, 0, state.numIndices32Bits);
         }
