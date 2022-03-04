@@ -1,3 +1,5 @@
+import { createRTCViewMat } from "../../../math/rtcCoords.js";
+
 function getNewDataTextureState ()
 {
     return {
@@ -149,4 +151,93 @@ function generateBindableTexture (gl, texture, textureWidth, textureHeight, text
     };
 }
 
-export { getNewDataTextureState, generateBindableTexture }
+function generateCameraDataTexture (gl, camera, scene, origin)
+{
+    const textureWidth = 4;
+    const textureHeight = 3; // space for 3 matrices
+
+    const texture = gl.createTexture();
+
+    gl.bindTexture (gl.TEXTURE_2D, texture);
+    
+    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, textureWidth, textureHeight);
+
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    gl.bindTexture (gl.TEXTURE_2D, null);
+
+    const cameraTexture = generateBindableTexture(
+        gl,
+        texture,
+        textureWidth,
+        textureHeight
+    );
+
+    let cameraDirty = true;
+
+    const onCameraMatrix = () => {
+        if (!cameraDirty) {
+            return;
+        }
+
+        cameraDirty = false;
+        
+        gl.bindTexture (gl.TEXTURE_2D, cameraTexture._texture);
+
+        // Camera's "view matrix"
+        gl.texSubImage2D(
+            gl.TEXTURE_2D,
+            0,
+            0,
+            0, // 1st matrix: camera view matrix
+            4,
+            1,
+            gl.RGBA,
+            gl.FLOAT,
+            new Float32Array ((origin) ? createRTCViewMat(camera.viewMatrix, origin) : camera.viewMatrix)
+        );
+
+        // Camera's "view normal matrix"
+        gl.texSubImage2D(
+            gl.TEXTURE_2D,
+            0,
+            0,
+            1, // 2nd matrix: camera view normal matrix
+            4,
+            1,
+            gl.RGBA,
+            gl.FLOAT,
+            new Float32Array (camera.viewNormalMatrix)
+        );
+
+        // Camera's "project matrix"
+        gl.texSubImage2D(
+            gl.TEXTURE_2D,
+            0,
+            0,
+            2, // 3rd matrix: camera project matrix
+            4,
+            1,
+            gl.RGBA,
+            gl.FLOAT,
+            new Float32Array (camera.project.matrix)
+        );
+    };
+
+    camera.on ("matrix", () => cameraDirty = true);
+
+    scene.on ("rendering", onCameraMatrix);
+
+    onCameraMatrix ();
+
+    return cameraTexture;
+}
+
+export {
+    getNewDataTextureState,
+    generateBindableTexture,
+    generateCameraDataTexture,
+}

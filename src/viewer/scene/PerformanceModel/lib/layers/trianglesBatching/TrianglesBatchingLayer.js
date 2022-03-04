@@ -12,8 +12,7 @@ import {quantizePositions, transformAndOctEncodeNormals} from "../../compression
 import { Float16Array, isFloat16Array, getFloat16, setFloat16, hfround, } from "./float16.js";
 import * as uniquifyPositions from "./calculateUniquePositions.js";
 import { rebucketPositions } from "./rebucketPositions.js";
-import { createRTCViewMat } from "../../../../math/rtcCoords.js";
-import { getNewDataTextureState, generateBindableTexture } from "../DataTextureState.js"
+import { getNewDataTextureState, generateBindableTexture, generateCameraDataTexture } from "../DataTextureState.js"
 
 // 12-bits allowed for object ids
 const MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER = (1 << 12);
@@ -190,94 +189,12 @@ class TrianglesBatchingLayer {
 
         if (!this.model.cameraTexture)
         {
-            const camera = this.model.scene.camera;
-            const scene = this.model.scene;
-
-            const gl = this.model.scene.canvas.gl;
-            
-            const textureWidth = 4;
-            const textureHeight = 3; // space for 3 matrices
-
-            const texture = gl.createTexture();
-
-            gl.bindTexture (gl.TEXTURE_2D, texture);
-            
-            gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, textureWidth, textureHeight);
-
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    
-            gl.bindTexture (gl.TEXTURE_2D, null);
-
-            this.model.cameraTexture = generateBindableTexture(
-                gl,
-                texture,
-                textureWidth,
-                textureHeight
+            this.model.cameraTexture = generateCameraDataTexture (
+                this.model.scene.canvas.gl,
+                this.model.scene.camera,
+                this.model.scene,
+                this._state.origin
             );
-
-            const self = this;
-
-            let cameraDirty = true;
-
-            const onCameraMatrix = () => {
-                if (!cameraDirty) {
-                    return;
-                }
-
-                cameraDirty = false;
-                
-                gl.bindTexture (gl.TEXTURE_2D, self.model.cameraTexture._texture);
-
-                const origin = self._state.origin;
-
-                // Camera's "view matrix"
-                gl.texSubImage2D(
-                    gl.TEXTURE_2D,
-                    0,
-                    0,
-                    0, // 1st matrix: camera view matrix
-                    4,
-                    1,
-                    gl.RGBA,
-                    gl.FLOAT,
-                    new Float32Array ((origin) ? createRTCViewMat(camera.viewMatrix, origin) : camera.viewMatrix)
-                );
-    
-                // Camera's "view normal matrix"
-                gl.texSubImage2D(
-                    gl.TEXTURE_2D,
-                    0,
-                    0,
-                    1, // 2nd matrix: camera view normal matrix
-                    4,
-                    1,
-                    gl.RGBA,
-                    gl.FLOAT,
-                    new Float32Array (camera.viewNormalMatrix)
-                );
-
-                // Camera's "project matrix"
-                gl.texSubImage2D(
-                    gl.TEXTURE_2D,
-                    0,
-                    0,
-                    2, // 3rd matrix: camera project matrix
-                    4,
-                    1,
-                    gl.RGBA,
-                    gl.FLOAT,
-                    new Float32Array (camera.project.matrix)
-                );
-            };
-
-            camera.on ("matrix", () => cameraDirty = true);
-
-            scene.on ("rendering", onCameraMatrix);
-
-            onCameraMatrix ();
         }
 
         this._dataTextureState.textureCameraMatrices = this.model.cameraTexture;
