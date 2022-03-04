@@ -22,6 +22,74 @@ const ramStats = {
     overheadSizeAlignementEdgeIndices: 0, 
 };
 
+class BindableDataTexture
+{
+    constructor(gl, texture, textureWidth, textureHeight, textureData = null)
+    {
+        /**
+         * The WebGLRenderingContext.
+         * @private
+         */
+        this._gl = gl;
+
+        /**
+         * The WebGLTexture handle.
+         * @private
+         */
+        this._texture = texture;
+
+        /**
+         * The texture width.
+         * @private
+         */
+        this._textureWidth = textureWidth;
+
+        /**
+         * The texture height.
+         * @private
+         */
+        this.textureHeight = textureHeight;
+
+         /**
+          * (nullable) When the texture data array is kept in the JS side, it will be stored here.
+          * @private
+          */
+        this._textureData = textureData;
+    }
+
+    /**
+     * Convenience method to be used by the renderers to bind the texture before draw calls.
+     * @public
+     */
+    bindTexture (glProgram, shaderName, glTextureUnit) {
+        return glProgram.bindTexture (shaderName, this, glTextureUnit);
+    }
+
+    /**
+     * Used internally by the `program` passed to `bindTexture` in order to bind the texture to an active `texture-unit`.
+     * @private
+     */
+    bind (unit) {
+        this._gl.activeTexture(this._gl["TEXTURE" + unit]);
+        this._gl.bindTexture(this._gl.TEXTURE_2D, this._texture);
+        return true;
+    }
+
+    /**
+     * Used internally by the `program` passed to `bindTexture` in order to bind the texture to an active `texture-unit`.
+     * @private
+     */
+    unbind (unit) {
+        // This `unbind` method is ignored at the moment to allow avoiding to rebind same texture already bound to a texture unit.
+
+        // this._gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+        // this._gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+    }
+}
+
+/**
+ * Returns a new, empty, data-texture state container to be used with Peformance Renderers.
+ */
 function getNewDataTextureState ()
 {
     return {
@@ -116,63 +184,17 @@ function getNewDataTextureState ()
     }
 }
 
-function generateBindableTexture (gl, texture, textureWidth, textureHeight, textureData = null)
-{
-    return {
-        /**
-         * The WebGLRenderingContext.
-         * @private
-         */
-        _gl: gl,
-        /**
-         * The WebGLTexture handle.
-         * @private
-         */
-        _texture: texture,
-        /**
-         * The texture width.
-         * @private
-         */
-        _textureWidth: textureWidth,
-        /**
-         * The texture height.
-         * @private
-         */
-        _textureHeight: textureHeight,
-        /**
-         * Then the texture data array is kept in the JS side, it will be stored here.
-         * @private
-         */
-        _textureData: textureData,
-        /**
-         * Convenience method to be used by the renderers to bind the texture before draw calls.
-         * @public
-         */
-        bindTexture: function (glProgram, shaderName, glTextureUnit) {
-            return glProgram.bindTexture (shaderName, this, glTextureUnit);
-        },
-        /**
-         * Used internally by the `program` passed to `bindTexture` in order to bind the texture to an active `texture-unit`.
-         * @private
-         */
-        bind: function (unit) {
-            this._gl.activeTexture(this._gl["TEXTURE" + unit]);
-            this._gl.bindTexture(this._gl.TEXTURE_2D, this._texture);
-            return true;
-        },
-        /**
-         * Used internally by the `program` passed to `bindTexture` in order to bind the texture to an active `texture-unit`.
-         * @private
-         */
-        unbind: function (unit) {
-            // This `unbind` method is ignored at the moment to allow avoiding to rebind same texture already bound to a texture unit.
-
-            // this._gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-            // this._gl.bindTexture(this.state.gl.TEXTURE_2D, null);
-        }
-    };
-}
-
+/**
+ * Generate and return a `camera data texture`.
+ * 
+ * The texture will automatically update its contents before each render when the camera matrix is dirty. 
+ * 
+ * @param {*} gl 
+ * @param {*} camera 
+ * @param {*} scene 
+ * @param {*} origin 
+ * @returns 
+ */
 function generateCameraDataTexture (gl, camera, scene, origin)
 {
     const textureWidth = 4;
@@ -191,7 +213,7 @@ function generateCameraDataTexture (gl, camera, scene, origin)
 
     gl.bindTexture (gl.TEXTURE_2D, null);
 
-    const cameraTexture = generateBindableTexture(
+    const cameraTexture = new BindableDataTexture(
         gl,
         texture,
         textureWidth,
@@ -258,6 +280,13 @@ function generateCameraDataTexture (gl, camera, scene, origin)
     return cameraTexture;
 }
 
+/**
+ * Generate and return a `model data texture`.
+ *
+ * @param {*} gl 
+ * @param {PerformanceModel} model 
+ * @returns 
+ */
 function generatePeformanceModelDataTexture (gl, model)
 {
     const textureWidth = 4;
@@ -300,7 +329,7 @@ function generatePeformanceModelDataTexture (gl, model)
 
     gl.bindTexture (gl.TEXTURE_2D, null);
 
-    return generateBindableTexture(
+    return new BindableDataTexture(
         gl,
         texture,
         textureWidth,
@@ -415,7 +444,7 @@ function generateTextureForColorsAndFlags (gl, colors, pickColors, vertexBases) 
 
     gl.bindTexture(gl.TEXTURE_2D, null);
 
-    return generateBindableTexture(
+    return new BindableDataTexture(
         gl,
         texture,
         textureWidth,
@@ -485,7 +514,7 @@ function generateTextureForPositionsDecodeMatrices (gl, positionDecodeMatrices) 
 
     gl.bindTexture(gl.TEXTURE_2D, null);
 
-    return generateBindableTexture(
+    return new BindableDataTexture(
         gl,
         texture,
         textureWidth,
@@ -546,7 +575,7 @@ function generateTextureFor8BitIndices (gl, indices) {
 
     gl.bindTexture(gl.TEXTURE_2D, null);
 
-    return generateBindableTexture(
+    return new BindableDataTexture(
         gl,
         texture,
         textureWidth,
@@ -606,7 +635,7 @@ function generateTextureFor16BitIndices (gl, indices) {
 
     gl.bindTexture(gl.TEXTURE_2D, null);
 
-    return generateBindableTexture(
+    return new BindableDataTexture(
         gl,
         texture,
         textureWidth,
@@ -667,7 +696,7 @@ function generateTextureFor32BitIndices (gl, indices) {
 
     gl.bindTexture(gl.TEXTURE_2D, null);
 
-    return generateBindableTexture(
+    return new BindableDataTexture(
         gl,
         texture,
         textureWidth,
@@ -728,7 +757,7 @@ function generateTextureFor8BitsEdgeIndices (gl, edgeIndices) {
 
     gl.bindTexture(gl.TEXTURE_2D, null);
 
-    return generateBindableTexture(
+    return new BindableDataTexture(
         gl,
         texture,
         textureWidth,
@@ -789,7 +818,7 @@ function generateTextureFor16BitsEdgeIndices (gl, edgeIndices) {
 
     gl.bindTexture(gl.TEXTURE_2D, null);
 
-    return generateBindableTexture(
+    return new BindableDataTexture(
         gl,
         texture,
         textureWidth,
@@ -850,7 +879,7 @@ function generateTextureFor32BitsEdgeIndices (gl, edgeIndices) {
 
     gl.bindTexture(gl.TEXTURE_2D, null);
 
-    return generateBindableTexture(
+    return new BindableDataTexture(
         gl,
         texture,
         textureWidth,
@@ -915,7 +944,7 @@ function generateTextureForPositions (gl, positions) {
 
     gl.bindTexture(gl.TEXTURE_2D, null);
 
-    return generateBindableTexture(
+    return new BindableDataTexture(
         gl,
         texture,
         textureWidth,
@@ -980,7 +1009,7 @@ function generateTextureForPackedPortionIds (gl, portionIdsArray) {
 
     gl.bindTexture(gl.TEXTURE_2D, null);
 
-    return generateBindableTexture(
+    return new BindableDataTexture(
         gl,
         texture,
         textureWidth,
