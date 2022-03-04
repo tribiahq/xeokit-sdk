@@ -92,4 +92,61 @@ function getNewDataTextureState ()
     }
 }
 
-export { getNewDataTextureState }
+function generateBindableTexture (gl, texture, textureWidth, textureHeight, textureData = null)
+{
+    return {
+        /**
+         * The WebGLRenderingContext.
+         * @private
+         */
+        _gl: gl,
+        /**
+         * The WebGLTexture handle.
+         * @private
+         */
+        _texture: texture,
+        /**
+         * The texture width.
+         * @private
+         */
+        _textureWidth: textureWidth,
+        /**
+         * The texture height.
+         * @private
+         */
+        _textureHeight: textureHeight,
+        /**
+         * Then the texture data array is kept in the JS side, it will be stored here.
+         * @private
+         */
+        _textureData: textureData,
+        /**
+         * Convenience method to be used by the renderers to bind the texture before draw calls.
+         * @public
+         */
+        bindTexture: function (glProgram, shaderName, glTextureUnit) {
+            return glProgram.bindTexture (shaderName, this, glTextureUnit);
+        },
+        /**
+         * Used internally by the `program` passed to `bindTexture` in order to bind the texture to an active `texture-unit`.
+         * @private
+         */
+        bind: function (unit) {
+            this._gl.activeTexture(this._gl["TEXTURE" + unit]);
+            this._gl.bindTexture(this._gl.TEXTURE_2D, this._texture);
+            return true;
+        },
+        /**
+         * Used internally by the `program` passed to `bindTexture` in order to bind the texture to an active `texture-unit`.
+         * @private
+         */
+        unbind: function (unit) {
+            // This `unbind` method is ignored at the moment to allow avoiding to rebind same texture already bound to a texture unit.
+
+            // this._gl.activeTexture(this.state.gl["TEXTURE" + unit]);
+            // this._gl.bindTexture(this.state.gl.TEXTURE_2D, null);
+        }
+    };
+}
+
+export { getNewDataTextureState, generateBindableTexture }
