@@ -236,8 +236,59 @@ function generateCameraDataTexture (gl, camera, scene, origin)
     return cameraTexture;
 }
 
+function generatePeformanceModelDataTexture (gl, model)
+{
+    const textureWidth = 4;
+    const textureHeight = 2; // space for 2 matrices
+
+    const texture = gl.createTexture();
+
+    gl.bindTexture (gl.TEXTURE_2D, texture);
+    
+    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, textureWidth, textureHeight);
+
+    gl.texSubImage2D(
+        gl.TEXTURE_2D,
+        0,
+        0, // x-offset
+        0, // y-offset (model world matrix)
+        4, // data width (4x4 values)
+        1, // data height (1 matrix)
+        gl.RGBA,
+        gl.FLOAT,
+        new Float32Array (model.worldMatrix)
+    );
+
+    gl.texSubImage2D(
+        gl.TEXTURE_2D,
+        0,
+        0, // x-offset
+        1, // y-offset (model normal matrix)
+        4, // data width (4x4 values)
+        1, // data height (1 matrix)
+        gl.RGBA,
+        gl.FLOAT,
+        new Float32Array (model.worldNormalMatrix)
+    );
+
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    gl.bindTexture (gl.TEXTURE_2D, null);
+
+    return generateBindableTexture(
+        gl,
+        texture,
+        textureWidth,
+        textureHeight
+    );
+}
+
 export {
     getNewDataTextureState,
     generateBindableTexture,
     generateCameraDataTexture,
+    generatePeformanceModelDataTexture,
 }
