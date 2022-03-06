@@ -13,20 +13,9 @@ import * as uniquifyPositions from "./calculateUniquePositions.js";
 import { rebucketPositions } from "./rebucketPositions.js";
 import {
     ramStats,
-    getNewDataTextureState,
-    generateCameraDataTexture,
-    generatePeformanceModelDataTexture,
-    generateTextureForColorsAndFlags,
-    generateTextureForPositionsDecodeMatrices,
-    generateTextureFor8BitIndices,
-    generateTextureFor16BitIndices,
-    generateTextureFor32BitIndices,
-    generateTextureFor8BitsEdgeIndices,
-    generateTextureFor16BitsEdgeIndices,
-    generateTextureFor32BitsEdgeIndices,
-    generateTextureForPositions,
-    generateTextureForPackedPortionIds
- } from "../DataTextureState.js"
+    DataTextureState,
+    DataTextureGenerator
+} from "../DataTextureState.js"
 
 // 12-bits allowed for object ids
 const MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER = (1 << 12);
@@ -105,7 +94,15 @@ class TrianglesBatchingLayer {
         this._buffer = new TrianglesBatchingBuffer(cfg.maxGeometryBatchSize);
         this._scratchMemory = cfg.scratchMemory;
 
-        this._dataTextureState = getNewDataTextureState ();
+        /**
+         * @type {DataTextureState}
+         */
+        this._dataTextureState = new DataTextureState ();
+
+        /**
+         * @type {DataTextureGenerator}
+         */
+        this.dataTextureGenerator = new DataTextureGenerator();
 
         this._state = new RenderState({
             offsetsBuf: null,
@@ -182,7 +179,7 @@ class TrianglesBatchingLayer {
 
         if (!this.model.cameraTexture)
         {
-            this.model.cameraTexture = generateCameraDataTexture (
+            this.model.cameraTexture = this.dataTextureGenerator.generateCameraDataTexture (
                 this.model.scene.canvas.gl,
                 this.model.scene.camera,
                 this.model.scene,
@@ -332,12 +329,7 @@ class TrianglesBatchingLayer {
     _createPortion(cfg) {
         ramStats.numberOfPortions++;
 
-        if ((cfg.positions.length / 3) > (1<<16))
-        {
-            console.log (`YAY! ${(cfg.positions.length / 3)} positions`);
-        }
-
-        // Indices 64-triangles aglignement
+        // Indices alignement
         if (cfg.indices)
         {
             const alignedIndicesLen = Math.ceil ((cfg.indices.length / 3) / INDICES_EDGE_INDICES_ALIGNEMENT_SIZE) * INDICES_EDGE_INDICES_ALIGNEMENT_SIZE * 3;
@@ -352,7 +344,7 @@ class TrianglesBatchingLayer {
             }
         }
 
-        // EdgeIndices 64-edged alignement
+        // EdgeIndices alignement
         if (cfg.edgeIndices)
         {
             const alignedEdgeIndicesLen = Math.ceil ((cfg.edgeIndices.length / 2) / INDICES_EDGE_INDICES_ALIGNEMENT_SIZE) * INDICES_EDGE_INDICES_ALIGNEMENT_SIZE * 2;
@@ -677,7 +669,7 @@ class TrianglesBatchingLayer {
         // Generate all the needed textures in the layer
 
         // a) colors and flags texture
-        textureState.texturePerObjectIdColorsAndFlags = generateTextureForColorsAndFlags (
+        textureState.texturePerObjectIdColorsAndFlags = this.dataTextureGenerator.generateTextureForColorsAndFlags (
             gl,
             this._objectDataColors,
             this._objectDataPickColors,
@@ -685,77 +677,77 @@ class TrianglesBatchingLayer {
         );
 
         // b) positions decode matrices texture
-        textureState.texturePerObjectIdPositionsDecodeMatrix = generateTextureForPositionsDecodeMatrices (
+        textureState.texturePerObjectIdPositionsDecodeMatrix = this.dataTextureGenerator.generateTextureForPositionsDecodeMatrices (
             gl,
             this._objectDataPositionsMatrices
         ); 
 
         // c) position coordinates texture
-        textureState.texturePerVertexIdCoordinates = generateTextureForPositions (
+        textureState.texturePerVertexIdCoordinates = this.dataTextureGenerator.generateTextureForPositions (
             gl,
             buffer.positions
         );
 
         // d) portion Id triangles texture
-        textureState.texturePerPolygonIdPortionIds8Bits = generateTextureForPackedPortionIds (
+        textureState.texturePerPolygonIdPortionIds8Bits = this.dataTextureGenerator.generateTextureForPackedPortionIds (
             gl,
             this._portionIdForIndices8Bits
         );
 
-        textureState.texturePerPolygonIdPortionIds16Bits = generateTextureForPackedPortionIds (
+        textureState.texturePerPolygonIdPortionIds16Bits = this.dataTextureGenerator.generateTextureForPackedPortionIds (
             gl,
             this._portionIdForIndices16Bits
         );
 
-        textureState.texturePerPolygonIdPortionIds32Bits = generateTextureForPackedPortionIds (
+        textureState.texturePerPolygonIdPortionIds32Bits = this.dataTextureGenerator.generateTextureForPackedPortionIds (
             gl,
             this._portionIdForIndices32Bits
         );
 
         // e) portion Id texture for edges
-        textureState.texturePerEdgeIdPortionIds8Bits = generateTextureForPackedPortionIds (
+        textureState.texturePerEdgeIdPortionIds8Bits = this.dataTextureGenerator.generateTextureForPackedPortionIds (
             gl,
             this._portionIdForEdges8Bits
         );
 
-        textureState.texturePerEdgeIdPortionIds16Bits = generateTextureForPackedPortionIds (
+        textureState.texturePerEdgeIdPortionIds16Bits = this.dataTextureGenerator.generateTextureForPackedPortionIds (
             gl,
             this._portionIdForEdges16Bits
         );
 
-        textureState.texturePerEdgeIdPortionIds32Bits = generateTextureForPackedPortionIds (
+        textureState.texturePerEdgeIdPortionIds32Bits = this.dataTextureGenerator.generateTextureForPackedPortionIds (
             gl,
             this._portionIdForEdges32Bits
         );
 
         // f) indices texture
-        textureState.texturePerPolygonIdIndices8Bits = generateTextureFor8BitIndices (
+        textureState.texturePerPolygonIdIndices8Bits = this.dataTextureGenerator.generateTextureFor8BitIndices (
             gl,
             buffer.indices8Bits
         );
 
-        textureState.texturePerPolygonIdIndices16Bits = generateTextureFor16BitIndices (
+        textureState.texturePerPolygonIdIndices16Bits = this.dataTextureGenerator.generateTextureFor16BitIndices (
             gl,
             buffer.indices16Bits
         );
 
-        textureState.texturePerPolygonIdIndices32Bits = generateTextureFor32BitIndices (
+        textureState.texturePerPolygonIdIndices32Bits = this.dataTextureGenerator.generateTextureFor32BitIndices (
             gl,
             buffer.indices32Bits
         );
         
         // g) edge indices texture
-        textureState.texturePerPolygonIdEdgeIndices8Bits = generateTextureFor8BitsEdgeIndices (
+        textureState.texturePerPolygonIdEdgeIndices8Bits = this.dataTextureGenerator.generateTextureFor8BitsEdgeIndices (
             gl,
             buffer.edgeIndices8Bits
         );
         
-        textureState.texturePerPolygonIdEdgeIndices16Bits = generateTextureFor16BitsEdgeIndices (
+        textureState.texturePerPolygonIdEdgeIndices16Bits = this.dataTextureGenerator.generateTextureFor16BitsEdgeIndices (
             gl,
             buffer.edgeIndices16Bits
         );
         
-        textureState.texturePerPolygonIdEdgeIndices32Bits = generateTextureFor32BitsEdgeIndices (
+        textureState.texturePerPolygonIdEdgeIndices32Bits = this.dataTextureGenerator.generateTextureFor32BitsEdgeIndices (
             gl,
             buffer.edgeIndices32Bits
         );
@@ -786,7 +778,7 @@ class TrianglesBatchingLayer {
         // Model matrices texture
         if (!this.model._modelMatricesTexture)
         {
-            this.model._modelMatricesTexture = generatePeformanceModelDataTexture (
+            this.model._modelMatricesTexture = this.dataTextureGenerator.generatePeformanceModelDataTexture (
                 gl, this.model
             );
         }
