@@ -30,6 +30,7 @@ class TrianglesBatchingPickMeshRenderer {
         const camera = scene.camera;
         const gl = scene.canvas.gl;
         const state = batchingLayer._state;
+        const textureState = state.textureState;
         const origin = batchingLayer._state.origin;
 
         if (!this._program) {
@@ -40,63 +41,38 @@ class TrianglesBatchingPickMeshRenderer {
             frameCtx.lastProgramId = this._program.id;
             this._bindProgram(frameCtx);
         }
-
-        var rr = this._program.bindTexture(
+        
+        textureState.texturePerObjectIdPositionsDecodeMatrix.bindTexture (
+            this._program,
             this._uTexturePerObjectIdPositionsDecodeMatrix, 
-            {
-                bind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, state.texturePerObjectIdPositionsDecodeMatrix);
-                    return true;
-                },
-                unbind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, null);
-                }
-            },
             1
-        ); // chipmunk
+        );
 
-        var rr2 = this._program.bindTexture(
+        textureState.texturePerVertexIdCoordinates.bindTexture (
+            this._program,
             this._uTexturePerVertexIdCoordinates, 
-            {
-                bind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, state.texturePerVertexIdCoordinates);
-                    return true;
-                },
-                unbind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, null);
-                }
-            },
             2
-        ); // chipmunk
-
-        var rr3 = this._program.bindTexture(
-            this._uTexturePerObjectIdColorsAndFlags,
-            {
-                bind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, state.texturePerObjectIdColorsAndFlags);
-                    return true;
-                },
-                unbind: function (unit) {
-                    gl.activeTexture(gl["TEXTURE" + unit]);
-                    gl.bindTexture(gl.TEXTURE_2D, null);
-                }
-            },
+        );
+                
+        textureState.texturePerObjectIdColorsAndFlags.bindTexture (
+            this._program,
+            this._uTexturePerObjectIdColorsAndFlags, 
             3
-        ); // chipmunk
+        );
+
+        textureState.textureCameraMatrices.bindTexture (
+            this._program,
+            this._uTextureCameraMatrices, 
+            6
+        );
+
+        textureState.textureModelMatrices.bindTexture (
+            this._program,
+            this._uTextureModelMatrices, 
+            7
+        );
 
         gl.uniform1i(this._uRenderPass, renderPass);
-        gl.uniformMatrix4fv(this._uWorldMatrix, false, model.worldMatrix);
-
-        const pickViewMatrix = frameCtx.pickViewMatrix || camera.viewMatrix;
-        const viewMatrix = origin ? createRTCViewMat(pickViewMatrix, origin) : pickViewMatrix;
-
-        gl.uniformMatrix4fv(this._uProjMatrix, false, frameCtx.pickProjMatrix);
-        gl.uniformMatrix4fv(this._uViewMatrix, false, viewMatrix);
 
         if (scene.logarithmicDepthBufferEnabled) {
             const logDepthBufFC = 2.0 / (Math.log(camera.project.far + 1.0) / Math.LN2); // TODO: Far from pick project matrix?
@@ -128,109 +104,49 @@ class TrianglesBatchingPickMeshRenderer {
         }
 
         if (state.numIndices8Bits > 0) {
-            var rr4 = this._program.bindTexture(
+            textureState.texturePerPolygonIdPortionIds8Bits.bindTexture (
+                this._program,
                 this._uTexturePerPolygonIdPortionIds, 
-                {
-                    bind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdPortionIds8Bits);
-                        return true;
-                    },
-                    unbind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, null);
-                    }
-                },
                 4
-            ); // chipmunk
+            );    
     
-            var rr5 = this._program.bindTexture(
+            textureState.texturePerPolygonIdIndices8Bits.bindTexture (
+                this._program,
                 this._uTexturePerPolygonIdIndices, 
-                {
-                    bind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdIndices8Bits);
-                        return true;
-                    },
-                    unbind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, null);
-                    }
-                },
                 5
-            ); // chipmunk
+            );
 
             gl.drawArrays(gl.TRIANGLES, 0, state.numIndices8Bits);
         }
 
         if (state.numIndices16Bits > 0) {
-            var rr4 = this._program.bindTexture(
+            textureState.texturePerPolygonIdPortionIds16Bits.bindTexture (
+                this._program,
                 this._uTexturePerPolygonIdPortionIds, 
-                {
-                    bind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdPortionIds16Bits);
-                        return true;
-                    },
-                    unbind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, null);
-                    }
-                },
                 4
-            ); // chipmunk
+            );    
     
-            var rr5 = this._program.bindTexture(
+            textureState.texturePerPolygonIdIndices16Bits.bindTexture (
+                this._program,
                 this._uTexturePerPolygonIdIndices, 
-                {
-                    bind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdIndices16Bits);
-                        return true;
-                    },
-                    unbind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, null);
-                    }
-                },
                 5
-            ); // chipmunk
+            );
 
             gl.drawArrays(gl.TRIANGLES, 0, state.numIndices16Bits);
         }
-
+        
         if (state.numIndices32Bits > 0) {
-            var rr4 = this._program.bindTexture(
+            textureState.texturePerPolygonIdPortionIds32Bits.bindTexture (
+                this._program,
                 this._uTexturePerPolygonIdPortionIds, 
-                {
-                    bind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdPortionIds32Bits);
-                        return true;
-                    },
-                    unbind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, null);
-                    }
-                },
                 4
-            ); // chipmunk
+            );    
     
-            var rr5 = this._program.bindTexture(
+            textureState.texturePerPolygonIdIndices32Bits.bindTexture (
+                this._program,
                 this._uTexturePerPolygonIdIndices, 
-                {
-                    bind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, state.texturePerPolygonIdIndices32Bits);
-                        return true;
-                    },
-                    unbind: function (unit) {
-                        gl.activeTexture(gl["TEXTURE" + unit]);
-                        gl.bindTexture(gl.TEXTURE_2D, null);
-                    }
-                },
                 5
-            ); // chipmunk
+            );
 
             gl.drawArrays(gl.TRIANGLES, 0, state.numIndices32Bits);
         }
@@ -255,10 +171,6 @@ class TrianglesBatchingPickMeshRenderer {
 
         this._uRenderPass = program.getLocation("renderPass");
         this._uPickInvisible = program.getLocation("pickInvisible");
-        this._uPositionsDecodeMatrix = program.getLocation("positionsDecodeMatrix");
-        this._uWorldMatrix = program.getLocation("worldMatrix");
-        this._uViewMatrix = program.getLocation("viewMatrix");
-        this._uProjMatrix = program.getLocation("projMatrix");
 
         this._uSectionPlanes = [];
 
@@ -270,8 +182,10 @@ class TrianglesBatchingPickMeshRenderer {
             });
         }
         
-        this._aPackedVertexId = program.getAttribute("packedVertexId");
-
+        if (this._withSAO) {
+            this._uOcclusionTexture = "uOcclusionTexture";
+            this._uSAOParams = program.getLocation("uSAOParams");
+        }
 
         if (scene.logarithmicDepthBufferEnabled) {
             this._uLogDepthBufFC = program.getLocation("logDepthBufFC");
@@ -283,6 +197,8 @@ class TrianglesBatchingPickMeshRenderer {
         this._uTexturePerPolygonIdNormals = "uTexturePerPolygonIdNormals"; // chipmunk
         this._uTexturePerPolygonIdIndices = "uTexturePerPolygonIdIndices"; // chipmunk
         this._uTexturePerPolygonIdPortionIds = "uTexturePerPolygonIdPortionIds"; // chipmunk
+        this._uTextureCameraMatrices = "uTextureCameraMatrices"; // chipmunk
+        this._uTextureModelMatrices = "uTextureModelMatrices"; // chipmunk
     }
 
     _bindProgram(frameCtx) {
@@ -325,23 +241,22 @@ class TrianglesBatchingPickMeshRenderer {
 
         src.push("uniform int renderPass;");
 
-        src.push("in uvec3 packedVertexId;");
-
         if (scene.entityOffsetsEnabled) {
             src.push("in vec3 offset;");
         }
 
         src.push("uniform bool pickInvisible;");
-        src.push("uniform mat4 worldMatrix;");
-        src.push("uniform mat4 viewMatrix;");
-        src.push("uniform mat4 projMatrix;");
         // src.push("uniform sampler2D uOcclusionTexture;"); // chipmunk
-        src.push("uniform sampler2D uTexturePerObjectIdPositionsDecodeMatrix;"); // chipmunk
-        src.push("uniform usampler2D uTexturePerObjectIdColorsAndFlags;"); // chipmunk
-        src.push("uniform usampler2D uTexturePerVertexIdCoordinates;"); // chipmunk
-        src.push("uniform usampler2D uTexturePerPolygonIdIndices;"); // chipmunk
-        src.push("uniform isampler2D uTexturePerPolygonIdNormals;"); // chipmunk
-        src.push("uniform usampler2D uTexturePerPolygonIdPortionIds;"); // chipmunk
+
+        src.push("uniform mediump sampler2D uTexturePerObjectIdPositionsDecodeMatrix;"); // chipmunk
+        src.push("uniform lowp usampler2D uTexturePerObjectIdColorsAndFlags;"); // chipmunk
+        src.push("uniform mediump usampler2D uTexturePerVertexIdCoordinates;"); // chipmunk
+        src.push("uniform highp usampler2D uTexturePerPolygonIdIndices;"); // chipmunk
+        src.push("uniform mediump usampler2D uTexturePerPolygonIdPortionIds;"); // chipmunk
+        src.push("uniform highp sampler2D uTextureCameraMatrices;"); // chipmunk
+        src.push("uniform highp sampler2D uTextureModelMatrices;"); // chipmunk
+
+        src.push("vec3 positions[3];")
 
         if (scene.logarithmicDepthBufferEnabled) {
             src.push("uniform float logDepthBufFC;");
@@ -361,25 +276,35 @@ class TrianglesBatchingPickMeshRenderer {
 
         src.push("void main(void) {");
 
+        // camera matrices
+        src.push ("mat4 viewMatrix = mat4 (texelFetch (uTextureCameraMatrices, ivec2(0, 0), 0), texelFetch (uTextureCameraMatrices, ivec2(1, 0), 0), texelFetch (uTextureCameraMatrices, ivec2(2, 0), 0), texelFetch (uTextureCameraMatrices, ivec2(3, 0), 0));");
+        src.push ("mat4 viewNormalMatrix = mat4 (texelFetch (uTextureCameraMatrices, ivec2(0, 1), 0), texelFetch (uTextureCameraMatrices, ivec2(1, 1), 0), texelFetch (uTextureCameraMatrices, ivec2(2, 1), 0), texelFetch (uTextureCameraMatrices, ivec2(3, 1), 0));");
+        src.push ("mat4 projMatrix = mat4 (texelFetch (uTextureCameraMatrices, ivec2(0, 2), 0), texelFetch (uTextureCameraMatrices, ivec2(1, 2), 0), texelFetch (uTextureCameraMatrices, ivec2(2, 2), 0), texelFetch (uTextureCameraMatrices, ivec2(3, 2), 0));");
+
+        // model matrices
+        src.push ("mat4 worldMatrix = mat4 (texelFetch (uTextureModelMatrices, ivec2(0, 0), 0), texelFetch (uTextureModelMatrices, ivec2(1, 0), 0), texelFetch (uTextureModelMatrices, ivec2(2, 0), 0), texelFetch (uTextureModelMatrices, ivec2(3, 0), 0));");
+        src.push ("mat4 worldNormalMatrix = mat4 (texelFetch (uTextureModelMatrices, ivec2(0, 1), 0), texelFetch (uTextureModelMatrices, ivec2(1, 1), 0), texelFetch (uTextureModelMatrices, ivec2(2, 1), 0), texelFetch (uTextureModelMatrices, ivec2(3, 1), 0));");
+
         // constants
-        // src.push("int objectIndex = int(packedVertexId.g) & 1023;");
         src.push("int polygonIndex = gl_VertexID / 3;")
 
-        src.push("int h_normal_index = polygonIndex & 511;")
-        src.push("int v_normal_index = polygonIndex >> 9;")
-
         // get packed object-id
-        src.push("int h_packed_object_id_index = ((polygonIndex >> 3) / 2) & 511;")
-        src.push("int v_packed_object_id_index = ((polygonIndex >> 3) / 2) >> 9;")
+        src.push("int h_packed_object_id_index = (polygonIndex >> 3) & 511;")
+        src.push("int v_packed_object_id_index = (polygonIndex >> 3) >> 9;")
 
-        src.push("ivec3 packedObjectId = ivec3(texelFetch(uTexturePerPolygonIdPortionIds, ivec2(h_packed_object_id_index, v_packed_object_id_index), 0).rgb);");
+        src.push("int objectIndex = int(texelFetch(uTexturePerPolygonIdPortionIds, ivec2(h_packed_object_id_index, v_packed_object_id_index), 0).r);");
 
-        src.push("int objectIndex;")
-        src.push("if (((polygonIndex >> 3) % 2) == 0) {")
-        src.push("  objectIndex = (packedObjectId.r << 4) + (packedObjectId.g >> 4);")
-        src.push("} else {") 
-        src.push("  objectIndex = ((packedObjectId.g & 15) << 8) + packedObjectId.b;")
-        src.push("}")
+        // get flags & flags2
+        src.push("uvec4 flags = texelFetch (uTexturePerObjectIdColorsAndFlags, ivec2(2, objectIndex), 0);"); // chipmunk
+        src.push("uvec4 flags2 = texelFetch (uTexturePerObjectIdColorsAndFlags, ivec2(3, objectIndex), 0);"); // chipmunk
+        
+        // flags.w = NOT_RENDERED | PICK
+        // renderPass = PICK
+
+        src.push(`if (int(flags.w) != renderPass) {`);
+        src.push("   gl_Position = vec4(3.0, 3.0, 3.0, 1.0);"); // Cull vertex
+        src.push("   return;"); // Cull vertex
+        src.push("} else {");
 
         // get vertex base
         src.push("ivec4 packedVertexBase = ivec4(texelFetch (uTexturePerObjectIdColorsAndFlags, ivec2(4, objectIndex), 0));"); // chipmunk
@@ -395,39 +320,27 @@ class TrianglesBatchingPickMeshRenderer {
 
         src.push("mat4 positionsDecodeMatrix = mat4 (texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(0, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(1, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(2, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(3, objectIndex), 0));")
 
-        // get flags & flags2
-        src.push("uvec4 flags = texelFetch (uTexturePerObjectIdColorsAndFlags, ivec2(2, objectIndex), 0);"); // chipmunk
-        src.push("uvec4 flags2 = texelFetch (uTexturePerObjectIdColorsAndFlags, ivec2(3, objectIndex), 0);"); // chipmunk
-        
         // get position
-        src.push("vec3 position1 = vec3(texelFetch(uTexturePerVertexIdCoordinates, ivec2(indexPositionH.r, indexPositionV.r), 0));")
-        src.push("vec3 position2 = vec3(texelFetch(uTexturePerVertexIdCoordinates, ivec2(indexPositionH.g, indexPositionV.g), 0));")
-        src.push("vec3 position3 = vec3(texelFetch(uTexturePerVertexIdCoordinates, ivec2(indexPositionH.b, indexPositionV.b), 0));")
+        src.push("positions[0] = vec3(texelFetch(uTexturePerVertexIdCoordinates, ivec2(indexPositionH.r, indexPositionV.r), 0));")
+        src.push("positions[1] = vec3(texelFetch(uTexturePerVertexIdCoordinates, ivec2(indexPositionH.g, indexPositionV.g), 0));")
+        src.push("positions[2] = vec3(texelFetch(uTexturePerVertexIdCoordinates, ivec2(indexPositionH.b, indexPositionV.b), 0));")
+
+        // get pick-color
+        src.push("vPickColor = vec4(texelFetch (uTexturePerObjectIdColorsAndFlags, ivec2(1, objectIndex), 0)) / 255.0;");
 
         // get normal
-        src.push("vec3 normal = -normalize(cross(position3 - position1, position2 - position1));");
+        //src.push("vec3 normal = normalize(cross(positions[1] - positions[0], positions[2] - positions[0]));");
 
-        src.push("int vertexNumber = gl_VertexID % 3;");
-        src.push("vec3 position;");
-        src.push("if (vertexNumber == 0) position = position1;");
-        src.push("else if (vertexNumber == 1) position = position2;");
-        src.push("else position = position3;");
-        // get color
-        src.push("uvec4 pickColor = texelFetch (uTexturePerObjectIdColorsAndFlags, ivec2(1, objectIndex), 0);"); // chipmunk
+        src.push("vec3 position = positions[gl_VertexID % 3];");
+        
+        src.push("vec4 worldPosition = worldMatrix * (positionsDecodeMatrix * vec4(position, 1.0)); ");
 
-        // flags.w = NOT_RENDERED | PICK
-        // renderPass = PICK
-
-        src.push(`if (int(flags.w) != renderPass) {`);
-        src.push("   gl_Position = vec4(0.0, 0.0, 0.0, 0.0);"); // Cull vertex
-
-        src.push("  } else {");
-        src.push("      vec4 worldPosition = worldMatrix * (positionsDecodeMatrix * vec4(position, 1.0)); ");
         if (scene.entityOffsetsEnabled) {
-            src.push("      worldPosition.xyz = worldPosition.xyz + offset;");
+            src.push("worldPosition.xyz = worldPosition.xyz + offset;");
         }
-        src.push("      vec4 viewPosition  = viewMatrix * worldPosition; ");
-        src.push("      vPickColor = vec4(float(pickColor.r) / 255.0, float(pickColor.g) / 255.0, float(pickColor.b) / 255.0, float(pickColor.a) / 255.0);");
+
+        src.push("vec4 viewPosition = viewMatrix * worldPosition; ");
+
         if (clipping) {
             src.push("      vWorldPosition = worldPosition;");
             src.push("      vFlags2 = flags2;");
@@ -487,7 +400,8 @@ class TrianglesBatchingPickMeshRenderer {
             src.push("  }");
         }
         if (scene.logarithmicDepthBufferEnabled) {
-            src.push("    gl_FragDepth = isPerspective == 0.0 ? gl_FragCoord.z : log2( vFragDepth ) * logDepthBufFC * 0.5;");
+            // src.push("    gl_FragDepth = isPerspective == 0.0 ? gl_FragCoord.z : log2( vFragDepth ) * logDepthBufFC * 0.5;");
+            src.push("    gl_FragDepth = log2( vFragDepth ) * logDepthBufFC * 0.5;");
         }
         src.push("   outPickColor = vPickColor; ");
         src.push("}");
