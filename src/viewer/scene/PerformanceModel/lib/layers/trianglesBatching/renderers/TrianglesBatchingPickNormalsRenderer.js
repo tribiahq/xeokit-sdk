@@ -315,7 +315,7 @@ class TrianglesBatchingPickNormalsRenderer {
         src.push("positions[2] = vec3(texelFetch(uTexturePerVertexIdCoordinates, ivec2(indexPositionH.b, indexPositionV.b), 0));")
 
         // get normal
-        src.push("vec3 normal = normalize(cross(positions[1] - positions[0], positions[2] - positions[0]));");
+        src.push("vec3 normal = normalize(cross(positions[2] - positions[0], positions[1] - positions[0]));");
 
         src.push("vec3 position = positions[gl_VertexID % 3];");
         
