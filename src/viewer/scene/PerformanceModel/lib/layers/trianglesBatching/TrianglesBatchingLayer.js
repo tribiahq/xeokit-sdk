@@ -9,10 +9,13 @@ import {geometryCompressionUtils} from "../../../../math/geometryCompressionUtil
 import {getBatchingRenderers} from "./TrianglesBatchingRenderers.js";
 import {TrianglesBatchingBuffer} from "./TrianglesBatchingBuffer.js";
 import {quantizePositions, transformAndOctEncodeNormals} from "../../compression.js";
-import { Float16Array, isFloat16Array, getFloat16, setFloat16, hfround, } from "./float16.js";
 import * as uniquifyPositions from "./calculateUniquePositions.js";
 import { rebucketPositions } from "./rebucketPositions.js";
-import { createRTCViewMat } from "../../../../math/rtcCoords.js";
+import {
+    ramStats,
+    DataTextureState,
+    DataTextureGenerator
+} from "../DataTextureState.js"
 
 // 12-bits allowed for object ids
 const MAX_NUMBER_OBJECTS_IN_BATCHING_LAYER = (1 << 12);
@@ -23,27 +26,6 @@ const MAX_DATA_TEXTURE_HEIGHT = (1 << 11);
 const INDICES_EDGE_INDICES_ALIGNEMENT_SIZE = 8;
 
 let _maxEdgePortions = 2;
-
-let ramStats = {
-    sizeDataColorsAndFlags: 0,
-    sizeDataPositionDecodeMatrices: 0,
-    sizeDataTexturePositions: 0,
-    sizeDataTextureIndices: 0,
-    sizeDataTextureEdgeIndices: 0,
-    sizeDataTexturePortionIds: 0,
-    numberOfPortions: 0,
-    numberOfLayers: 0,
-    totalPolygons: 0,
-    totalPolygons8Bits: 0,
-    totalPolygons16Bits: 0,
-    totalPolygons32Bits: 0,
-    cannotCreatePortion: {
-        because10BitsObjectId: 0,
-        becauseTextureSize: 0,
-    },
-    overheadSizeAlignementIndices: 0, 
-    overheadSizeAlignementEdgeIndices: 0, 
-};
 
 let _lastCanCreatePortion = {
     positions: null,
@@ -73,149 +55,6 @@ const tempVec3f = math.vec3();
 const tempVec3g = math.vec3();
 
 let _numberOfLayers = 0;
-
-let textureCameraMatrices = {
-    lastOrigin: null,
-    differentOrigin: function (origin)
-    {
-        if (this.lastOrigin == null)
-        {
-            return true;
-        }
-
-        for (let i = 0; i < 3; i++)
-        {
-            if (origin[i] != this.lastOrigin[i])
-            {
-                return true;
-            }
-        }
-
-        return false;
-    },
-    lastCameraViewMatrix: null,
-    differentCameraViewMatrix: function (viewMatrix)
-    {
-        if (this.lastCameraViewMatrix == null)
-        {
-            return true;
-        }
-
-        for (let i = 0; i < 16; i++)
-        {
-            if (viewMatrix[i] != this.lastCameraViewMatrix [i])
-            {
-                return true;
-            }
-        }
-
-        return false;
-    },
-    lastCameraViewNormalMatrix: null,
-    differentCameraViewNormalMatrix: function (viewNormalMatrix)
-    {
-        if (this.lastCameraViewNormalMatrix == null)
-        {
-            return true;
-        }
-
-        for (let i = 0; i < 16; i++)
-        {
-            if (viewNormalMatrix[i] != this.lastCameraViewNormalMatrix [i])
-            {
-                return true;
-            }
-        }
-
-        return false;
-    },
-    lastCameraProjectMatrix: null,
-    differentCameraProjectMatrix: function (projectMatrix)
-    {
-        if (this.lastCameraProjectMatrix == null)
-        {
-            return true;
-        }
-
-        for (let i = 0; i < 16; i++)
-        {
-            if (projectMatrix[i] != this.lastCameraProjectMatrix [i])
-            {
-                return true;
-            }
-        }
-
-        return false;
-    },
-    ensureCameraMatrices: function (gl, origin, viewMatrix, viewNormalMatrix, projectMatrix)
-    {
-        if (this.differentOrigin(origin) || 
-            this.differentCameraViewMatrix(viewMatrix))
-        {
-            this.lastOrigin = origin.slice ();
-            this.lastCameraViewMatrix = viewMatrix.slice ();
-            gl.texSubImage2D(
-                gl.TEXTURE_2D,
-                0,
-                0,
-                0,
-                4,
-                1,
-                gl.RGBA,
-                gl.FLOAT,
-                ((origin) ? createRTCViewMat(viewMatrix, origin) : viewMatrix).slice ()
-            );
-            // console.log ("different1");
-        }
-        else
-        {
-            // console.log ("equal1");
-        }
-
-        if (this.differentCameraViewNormalMatrix (viewNormalMatrix))
-        {
-            this.lastCameraViewNormalMatrix = viewNormalMatrix.slice ();
-            gl.texSubImage2D(
-                gl.TEXTURE_2D,
-                0,
-                0,
-                1,
-                4,
-                1,
-                gl.RGBA,
-                gl.FLOAT,
-                new Float32Array (viewNormalMatrix)
-            );
-            // console.log ("different2");
-        }
-        else
-        {
-            // console.log ("equal2");
-        }
-
-        if (this.differentCameraProjectMatrix (projectMatrix))
-        {
-            this.lastCameraProjectMatrix = projectMatrix.slice ();
-            gl.texSubImage2D(
-                gl.TEXTURE_2D,
-                0,
-                0,
-                2,
-                4,
-                1,
-                gl.RGBA,
-                gl.FLOAT,
-                new Float32Array (projectMatrix)
-            );
-            // console.log ("different3");
-        }
-        else
-        {
-            // console.log ("equal3");
-        }
-    },
-    texture: null
-};
 
 /**
  * @private
@@ -255,101 +94,15 @@ class TrianglesBatchingLayer {
         this._buffer = new TrianglesBatchingBuffer(cfg.maxGeometryBatchSize);
         this._scratchMemory = cfg.scratchMemory;
 
-        this._dataTextureState = {
-            /**
-             * Texture that holds colors/pickColors/flags/flags2 per-object:
-             * - columns: one concept per column => color / pick-color / ...
-             * - row: the object Id
-             */
-            texturePerObjectIdColorsAndFlags: null,
-            /**
-             * The number of objects stored in `texturePerObjectIdColorsAndFlags`.
-             */
-            texturePerObjectIdColorsAndFlagsHeight: null,
-            /**
-             * Texture that holds the positionsDecodeMatrix per-object:
-             * - columns: each column is one column of the matrix
-             * - row: the object Id
-             */
-            texturePerObjectIdPositionsDecodeMatrix: null,
-            /**
-             * Texture that holds all the `different-vertices` used by the layer.
-             */            
-            texturePerVertexIdCoordinates: null,
-            texturePerVertexIdCoordinatesHeight: null,
-            /**
-             * Texture that holds the PortionId that corresponds to a given polygon-id.
-             * 
-             * Variant of the texture for 8-bit based polygon-ids.
-             */
-            texturePerPolygonIdPortionIds8Bits: null,
-            /**
-             * Texture that holds the PortionId that corresponds to a given polygon-id.
-             * 
-             * Variant of the texture for 16-bit based polygon-ids.
-             */
-            texturePerPolygonIdPortionIds16Bits: null,
-            /**
-             * Texture that holds the PortionId that corresponds to a given polygon-id.
-             * 
-             * Variant of the texture for 32-bit based polygon-ids.
-             */
-            texturePerPolygonIdPortionIds32Bits: null,
-            /**
-             * Texture that holds the PortionId that corresponds to a given edge-id.
-             * 
-             * Variant of the texture for 8-bit based polygon-ids.
-             */
-            texturePerEdgeIdPortionIds8Bits: null,
-            /**
-             * Texture that holds the PortionId that corresponds to a given edge-id.
-             * 
-             * Variant of the texture for 16-bit based polygon-ids.
-             */
-            texturePerEdgeIdPortionIds16Bits: null,
-            /**
-             * Texture that holds the PortionId that corresponds to a given edge-id.
-             * 
-             * Variant of the texture for 32-bit based polygon-ids.
-             */
-            texturePerEdgeIdPortionIds32Bits: null,
-            /**
-             * Texture that holds the unique-vertex-indices for 8-bit based indices.
-             */            
-            texturePerPolygonIdIndices8Bits: null,
-            /**
-             * Texture that holds the unique-vertex-indices for 16-bit based indices.
-             */            
-            texturePerPolygonIdIndices16Bits: null,
-            /**
-             * Texture that holds the unique-vertex-indices for 32-bit based indices.
-             */            
-            texturePerPolygonIdIndices32Bits: null,
-            /**
-             * Texture that holds the unique-vertex-indices for 8-bit based edge indices.
-             */            
-            texturePerPolygonIdEdgeIndices8Bits: null,
-            /**
-             * Texture that holds the unique-vertex-indices for 16-bit based edge indices.
-             */            
-            texturePerPolygonIdEdgeIndices16Bits: null,
-            /**
-             * Texture that holds the unique-vertex-indices for 32-bit based edge indices.
-             */            
-            texturePerPolygonIdEdgeIndices32Bits: null,
-            /**
-             * Texture that holds the camera matrices
-             * - columns: each column in the texture is a camera matrix column.
-             * - row: each row is a different camera matrix.
-             */
-            textureCameraMatrices: null,
-            /**
-             * Texture that holds the model matrices
-             * - columns: each column in the texture is a model matrix column.
-             * - row: each row is a different model matrix.
-             */
-            textureModelMatrices: null,
-        };
+        /**
+         * @type {DataTextureState}
+         */
+        this._dataTextureState = new DataTextureState ();
+
+        /**
+         * @type {DataTextureGenerator}
+         */
+        this.dataTextureGenerator = new DataTextureGenerator();
 
         this._state = new RenderState({
             offsetsBuf: null,
@@ -426,94 +179,12 @@ class TrianglesBatchingLayer {
 
         if (!this.model.cameraTexture)
         {
-            const camera = this.model.scene.camera;
-            const scene = this.model.scene;
-
-            const gl = this.model.scene.canvas.gl;
-            
-            const textureWidth = 4;
-            const textureHeight = 3; // space for 3 matrices
-
-            const texture = gl.createTexture();
-
-            gl.bindTexture (gl.TEXTURE_2D, texture);
-            
-            gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, textureWidth, textureHeight);
-
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    
-            gl.bindTexture (gl.TEXTURE_2D, null);
-
-            this.model.cameraTexture = this.generateBindableTexture(
-                gl,
-                texture,
-                textureWidth,
-                textureHeight
+            this.model.cameraTexture = this.dataTextureGenerator.generateCameraDataTexture (
+                this.model.scene.canvas.gl,
+                this.model.scene.camera,
+                this.model.scene,
+                this._state.origin
             );
-
-            const self = this;
-
-            let cameraDirty = true;
-
-            const onCameraMatrix = () => {
-                if (!cameraDirty) {
-                    return;
-                }
-
-                cameraDirty = false;
-                
-                gl.bindTexture (gl.TEXTURE_2D, self.model.cameraTexture._texture);
-
-                const origin = self._state.origin;
-
-                // Camera's "view matrix"
-                gl.texSubImage2D(
-                    gl.TEXTURE_2D,
-                    0,
-                    0,
-                    0,
-                    4,
-                    1,
-                    gl.RGBA,
-                    gl.FLOAT,
-                    new Float32Array ((origin) ? createRTCViewMat(camera.viewMatrix, origin) : camera.viewMatrix)
-                );
-    
-                // Camera's "view normal matrix"
-                gl.texSubImage2D(
-                    gl.TEXTURE_2D,
-                    0,
-                    0,
-                    1,
-                    4,
-                    1,
-                    gl.RGBA,
-                    gl.FLOAT,
-                    new Float32Array (camera.viewNormalMatrix)
-                );
-
-                // Camera's "project matrix"
-                gl.texSubImage2D(
-                    gl.TEXTURE_2D,
-                    0,
-                    0,
-                    2,
-                    4,
-                    1,
-                    gl.RGBA,
-                    gl.FLOAT,
-                    new Float32Array (camera.project.matrix)
-                );
-            };
-
-            camera.on ("matrix", () => cameraDirty = true);
-
-            scene.on ("rendering", onCameraMatrix);
-
-            onCameraMatrix ();
         }
 
         this._dataTextureState.textureCameraMatrices = this.model.cameraTexture;
@@ -658,12 +329,7 @@ class TrianglesBatchingLayer {
     _createPortion(cfg) {
         ramStats.numberOfPortions++;
 
-        if ((cfg.positions.length / 3) > (1<<16))
-        {
-            console.log (`YAY! ${(cfg.positions.length / 3)} positions`);
-        }
-
-        // Indices 64-triangles aglignement
+        // Indices alignement
         if (cfg.indices)
         {
             const alignedIndicesLen = Math.ceil ((cfg.indices.length / 3) / INDICES_EDGE_INDICES_ALIGNEMENT_SIZE) * INDICES_EDGE_INDICES_ALIGNEMENT_SIZE * 3;
@@ -678,7 +344,7 @@ class TrianglesBatchingLayer {
             }
         }
 
-        // EdgeIndices 64-edged alignement
+        // EdgeIndices alignement
         if (cfg.edgeIndices)
         {
             const alignedEdgeIndicesLen = Math.ceil ((cfg.edgeIndices.length / 2) / INDICES_EDGE_INDICES_ALIGNEMENT_SIZE) * INDICES_EDGE_INDICES_ALIGNEMENT_SIZE * 2;
@@ -717,11 +383,6 @@ class TrianglesBatchingLayer {
         const vertsIndex = positionsIndex / 3;
         const numVerts = positions.length / 3;
         const lenPositions = positions.length;
-
-        for (let i = 0; i < numVerts; i++)
-        {
-            buffer.objectData.push (this._numPortions); // chipmunk
-        }
 
         if (this._preCompressed) {
 
@@ -858,8 +519,6 @@ class TrianglesBatchingLayer {
                     buffer.indices32Bits.push(indices[i+1]);
                     buffer.indices32Bits.push(indices[i+2]);
                 }
-                // buffer.indices.push(indices[i]);
-                // buffer.indices.push(indices[i+1]);
 
                 if ((triangleNumber % INDICES_EDGE_INDICES_ALIGNEMENT_SIZE) == 0) {
                     if (numUniquePositions <= (1<< 8)) {
@@ -923,8 +582,7 @@ class TrianglesBatchingLayer {
                     buffer.edgeIndices32Bits.push(edgeIndices[i]);
                     buffer.edgeIndices32Bits.push(edgeIndices[i+1]);
                 }
-                // buffer.edgeIndices.push(edgeIndices[i]);
-                // buffer.edgeIndices.push(edgeIndices[i+1]);
+
                 if ((edgeNumber % INDICES_EDGE_INDICES_ALIGNEMENT_SIZE) == 0) {
                     if (numUniquePositions <= (1<< 8)) {
                         this._portionIdForEdges8Bits.push (this._numPortions);
@@ -1011,7 +669,7 @@ class TrianglesBatchingLayer {
         // Generate all the needed textures in the layer
 
         // a) colors and flags texture
-        textureState.texturePerObjectIdColorsAndFlags = this.generateTextureForColorsAndFlags (
+        textureState.texturePerObjectIdColorsAndFlags = this.dataTextureGenerator.generateTextureForColorsAndFlags (
             gl,
             this._objectDataColors,
             this._objectDataPickColors,
@@ -1019,77 +677,77 @@ class TrianglesBatchingLayer {
         );
 
         // b) positions decode matrices texture
-        textureState.texturePerObjectIdPositionsDecodeMatrix = this.generateTextureForPositionsDecodeMatrices (
+        textureState.texturePerObjectIdPositionsDecodeMatrix = this.dataTextureGenerator.generateTextureForPositionsDecodeMatrices (
             gl,
             this._objectDataPositionsMatrices
         ); 
 
         // c) position coordinates texture
-        textureState.texturePerVertexIdCoordinates = this.generateTextureForPositions (
+        textureState.texturePerVertexIdCoordinates = this.dataTextureGenerator.generateTextureForPositions (
             gl,
             buffer.positions
         );
 
         // d) portion Id triangles texture
-        textureState.texturePerPolygonIdPortionIds8Bits = this.generateTextureForPackedPortionIds (
+        textureState.texturePerPolygonIdPortionIds8Bits = this.dataTextureGenerator.generateTextureForPackedPortionIds (
             gl,
             this._portionIdForIndices8Bits
         );
 
-        textureState.texturePerPolygonIdPortionIds16Bits = this.generateTextureForPackedPortionIds (
+        textureState.texturePerPolygonIdPortionIds16Bits = this.dataTextureGenerator.generateTextureForPackedPortionIds (
             gl,
             this._portionIdForIndices16Bits
         );
 
-        textureState.texturePerPolygonIdPortionIds32Bits = this.generateTextureForPackedPortionIds (
+        textureState.texturePerPolygonIdPortionIds32Bits = this.dataTextureGenerator.generateTextureForPackedPortionIds (
             gl,
             this._portionIdForIndices32Bits
         );
 
         // e) portion Id texture for edges
-        textureState.texturePerEdgeIdPortionIds8Bits = this.generateTextureForPackedPortionIds (
+        textureState.texturePerEdgeIdPortionIds8Bits = this.dataTextureGenerator.generateTextureForPackedPortionIds (
             gl,
             this._portionIdForEdges8Bits
         );
 
-        textureState.texturePerEdgeIdPortionIds16Bits = this.generateTextureForPackedPortionIds (
+        textureState.texturePerEdgeIdPortionIds16Bits = this.dataTextureGenerator.generateTextureForPackedPortionIds (
             gl,
             this._portionIdForEdges16Bits
         );
 
-        textureState.texturePerEdgeIdPortionIds32Bits = this.generateTextureForPackedPortionIds (
+        textureState.texturePerEdgeIdPortionIds32Bits = this.dataTextureGenerator.generateTextureForPackedPortionIds (
             gl,
             this._portionIdForEdges32Bits
         );
 
         // f) indices texture
-        textureState.texturePerPolygonIdIndices8Bits = this.generateTextureFor8BitIndices (
+        textureState.texturePerPolygonIdIndices8Bits = this.dataTextureGenerator.generateTextureFor8BitIndices (
             gl,
             buffer.indices8Bits
         );
 
-        textureState.texturePerPolygonIdIndices16Bits = this.generateTextureFor16BitIndices (
+        textureState.texturePerPolygonIdIndices16Bits = this.dataTextureGenerator.generateTextureFor16BitIndices (
             gl,
             buffer.indices16Bits
         );
 
-        textureState.texturePerPolygonIdIndices32Bits = this.generateTextureFor32BitIndices (
+        textureState.texturePerPolygonIdIndices32Bits = this.dataTextureGenerator.generateTextureFor32BitIndices (
             gl,
             buffer.indices32Bits
         );
         
         // g) edge indices texture
-        textureState.texturePerPolygonIdEdgeIndices8Bits = this.generateTextureFor8BitsEdgeIndices (
+        textureState.texturePerPolygonIdEdgeIndices8Bits = this.dataTextureGenerator.generateTextureFor8BitsEdgeIndices (
             gl,
             buffer.edgeIndices8Bits
         );
         
-        textureState.texturePerPolygonIdEdgeIndices16Bits = this.generateTextureFor16BitsEdgeIndices (
+        textureState.texturePerPolygonIdEdgeIndices16Bits = this.dataTextureGenerator.generateTextureFor16BitsEdgeIndices (
             gl,
             buffer.edgeIndices16Bits
         );
         
-        textureState.texturePerPolygonIdEdgeIndices32Bits = this.generateTextureFor32BitsEdgeIndices (
+        textureState.texturePerPolygonIdEdgeIndices32Bits = this.dataTextureGenerator.generateTextureFor32BitsEdgeIndices (
             gl,
             buffer.edgeIndices32Bits
         );
@@ -1120,51 +778,8 @@ class TrianglesBatchingLayer {
         // Model matrices texture
         if (!this.model._modelMatricesTexture)
         {
-            const textureWidth = 4;
-            const textureHeight = 2; // space for 2 matrices
-
-            const texture = gl.createTexture();
-
-            gl.bindTexture (gl.TEXTURE_2D, texture);
-            
-            gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, textureWidth, textureHeight);
-
-            gl.texSubImage2D(
-                gl.TEXTURE_2D,
-                0,
-                0, // x-offset
-                0, // y-offset (model world matrix)
-                4, // data width (4x4 values)
-                1, // data height (1 matrix)
-                gl.RGBA,
-                gl.FLOAT,
-                new Float32Array (this.model.worldMatrix.slice ())
-            );
-
-            gl.texSubImage2D(
-                gl.TEXTURE_2D,
-                0,
-                0, // x-offset
-                1, // y-offset (model normal matrix)
-                4, // data width (4x4 values)
-                1, // data height (1 matrix)
-                gl.RGBA,
-                gl.FLOAT,
-                new Float32Array (this.model.worldNormalMatrix.slice ())
-            );
-
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    
-            gl.bindTexture (gl.TEXTURE_2D, null);
-
-            this.model._modelMatricesTexture = this.generateBindableTexture(
-                gl,
-                texture,
-                textureWidth,
-                textureHeight
+            this.model._modelMatricesTexture = this.dataTextureGenerator.generatePeformanceModelDataTexture (
+                gl, this.model
             );
         }
 
@@ -1203,744 +818,6 @@ class TrianglesBatchingLayer {
         this._finalized = true;
 
         _lastCanCreatePortion.buckets = null;
-    }
-
-    generateBindableTexture (gl, texture, textureWidth, textureHeight, textureData = null)
-    {
-        return {
-            /**
-             * The WebGLRenderingContext.
-             * @private
-             */
-            _gl: gl,
-            /**
-             * The WebGLTexture handle.
-             * @private
-             */
-            _texture: texture,
-            /**
-             * The texture width.
-             * @private
-             */
-            _textureWidth: textureWidth,
-            /**
-             * The texture height.
-             * @private
-             */
-            _textureHeight: textureHeight,
-            /**
-             * Then the texture data array is kept in the JS side, it will be stored here.
-             * @private
-             */
-            _textureData: textureData,
-            /**
-             * Convenience method to be used by the renderers to bind the texture before draw calls.
-             * @public
-             */
-            bindTexture: function (glProgram, shaderName, glTextureUnit) {
-                return glProgram.bindTexture (shaderName, this, glTextureUnit);
-            },
-            /**
-             * Used internally by the `program` passed to `bindTexture` in order to bind the texture to an active `texture-unit`.
-             * @private
-             */
-            bind: function (unit) {
-                this._gl.activeTexture(this._gl["TEXTURE" + unit]);
-                this._gl.bindTexture(this._gl.TEXTURE_2D, this._texture);
-                return true;
-            },
-            /**
-             * Used internally by the `program` passed to `bindTexture` in order to bind the texture to an active `texture-unit`.
-             * @private
-             */
-            unbind: function (unit) {
-                // This `unbind` method is ignored at the moment to allow avoiding to rebind same texture already bound to a texture unit.
-
-                // this._gl.activeTexture(this.state.gl["TEXTURE" + unit]);
-                // this._gl.bindTexture(this.state.gl.TEXTURE_2D, null);
-            }
-        };
-    }
-
-    /**
-     * This will generate an RGBA texture for:
-     * - colors
-     * - pickColors
-     * - flags
-     * - flags2
-     * 
-     * The texture will have:
-     * - 4 RGBA columns per row: for each object (pick) color and flags(2)
-     * - N rows where N is the number of objects
-     * 
-     * @param {*} gl WebGL2Context 
-     * @param {*} colors Array of colors for all objects in the layer
-     * @param {*} pickColors Array of pickColors for all objects in the layer
-     * 
-     * @returns The created texture and its height
-     */
-    generateTextureForColorsAndFlags (gl, colors, pickColors, vertexBases) {
-        // The number of rows in the texture is the number of
-        // objects in the layer.
-
-        const textureHeight = colors.length;
-
-        if (textureHeight == 0)
-        {
-            throw "texture height == 0";
-        }
-
-        // 4 columns per texture row:
-        // - col0: (RGBA) object color RGBA
-        // - col1: (packed Uint32 as RGBA) object pick color
-        // - col2: (packed 4 bytes as RGBA) object flags
-        // - col3: (packed 4 bytes as RGBA) object flags2
-        const textureWidth = 6;
-
-        const texArray = new Uint8Array (4 * textureWidth * textureHeight);
-
-        ramStats.sizeDataColorsAndFlags +=texArray.byteLength;
-
-        for (var i = 0; i < textureHeight; i++)
-        {
-            // object color
-            texArray.set (
-                colors [i],
-                i * 24 + 0
-            );
-
-            // object pick color
-            texArray.set (
-                pickColors [i],
-                i * 24 + 4
-            );
-
-            // object flags
-            texArray.set (
-                [
-                    0, 0, 0, 0
-                ],
-                i * 24 + 8
-            );
-
-            // object flags2
-            texArray.set (
-                [
-                    0, 0, 0, 0
-                ],
-                i * 24 + 12
-            );
-
-            // vertex base
-            texArray.set (
-                [
-                    (vertexBases[i] >> 24) & 255,
-                    (vertexBases[i] >> 16) & 255,
-                    (vertexBases[i] >> 8) & 255,
-                    (vertexBases[i]) & 255,
-                ],
-                i * 24 + 16
-            );
-        }
-
-        const texture = gl.createTexture();
-
-        gl.bindTexture (gl.TEXTURE_2D, texture);
-
-        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8UI, textureWidth, textureHeight);
-
-        gl.texSubImage2D(
-            gl.TEXTURE_2D,
-            0,
-            0,
-            0,
-            textureWidth,
-            textureHeight,
-            gl.RGBA_INTEGER,
-            gl.UNSIGNED_BYTE,
-            texArray,
-            0
-        );
-
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
-
-        gl.bindTexture(gl.TEXTURE_2D, null);
-
-        return this.generateBindableTexture(
-            gl,
-            texture,
-            textureWidth,
-            textureHeight,
-            texArray
-        );
-    }
-
-    /**
-     * This will generate a texture for all positions decode matrices in the layer.
-     * 
-     * The texture will have:
-     * - 4 RGBA columns per row (each column will contain 4 packed half-float (16 bits) components).
-     *   Thus, each row will contain 16 packed half-floats corresponding to a complete positions decode matrix)
-     * - N rows where N is the number of objects
-     * 
-     * @param {*} gl WebGL2Context 
-     * @param {*} positionDecodeMatrices Array of positions decode matrices for all objects in the layer
-     * 
-     * @returns The created texture and its height
-     */
-    generateTextureForPositionsDecodeMatrices (gl, positionDecodeMatrices) {
-        const textureHeight =  positionDecodeMatrices.length;
-
-        if (textureHeight == 0)
-        {
-            throw "texture height == 0";
-        }
-
-        const textureWidth = 4;
-
-        var texArray = new Float16Array(4 * textureWidth * textureHeight);
-
-        ramStats.sizeDataPositionDecodeMatrices +=texArray.byteLength;
-
-        for (var i = 0; i < positionDecodeMatrices.length; i++)
-        {
-            // 4 values
-            texArray.set (
-                positionDecodeMatrices [i],
-                i * 16
-            );
-        }
-
-        const texture = gl.createTexture();
-
-        gl.bindTexture (gl.TEXTURE_2D, texture);
-        
-        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA16F, textureWidth, textureHeight);
-
-        gl.texSubImage2D(
-            gl.TEXTURE_2D,
-            0,
-            0,
-            0,
-            textureWidth,
-            textureHeight,
-            gl.RGBA,
-            gl.HALF_FLOAT,
-            new Uint16Array (texArray.buffer),
-            0
-        );
-
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
-
-        gl.bindTexture(gl.TEXTURE_2D, null);
-
-        return this.generateBindableTexture(
-            gl,
-            texture,
-            textureWidth,
-            textureHeight
-        );
-    }
-
-    /**
-     * TODO: document
-     */
-    generateTextureFor8BitIndices (gl, indices) {
-        if (indices.length == 0) {
-            return {
-                texture: null,
-                textureHeight: 0,
-            };
-        }
-
-        const textureWidth = 512;
-        const textureHeight = Math.ceil (indices.length / 3 / textureWidth);
-
-        if (textureHeight == 0)
-        {
-            throw "texture height == 0";
-        }
-
-        const texArraySize = textureWidth * textureHeight * 3;
-        const texArray = new Uint8Array (texArraySize);
-
-        ramStats.sizeDataTextureIndices +=texArray.byteLength;
-
-        texArray.fill(0);
-        texArray.set(indices, 0)
-
-        const texture = gl.createTexture();
-
-        gl.bindTexture (gl.TEXTURE_2D, texture);
-
-        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGB8UI, textureWidth, textureHeight);
-
-        gl.texSubImage2D(
-            gl.TEXTURE_2D,
-            0,
-            0,
-            0,
-            textureWidth,
-            textureHeight,
-            gl.RGB_INTEGER,
-            gl.UNSIGNED_BYTE,
-            texArray,
-            0
-        );
-
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-        gl.bindTexture(gl.TEXTURE_2D, null);
-
-        return this.generateBindableTexture(
-            gl,
-            texture,
-            textureWidth,
-            textureHeight
-        );
-    }
-
-    /**
-     * TODO: document
-     */
-    generateTextureFor16BitIndices (gl, indices) {
-        if (indices.length == 0) {
-            return {
-                texture: null,
-                textureHeight: 0,
-            };
-        }
-        const textureWidth = 512;
-        const textureHeight = Math.ceil (indices.length / 3 / textureWidth);
-
-        if (textureHeight == 0)
-        {
-            throw "texture height == 0";
-        }
-
-        const texArraySize = textureWidth * textureHeight * 3;
-        const texArray = new Uint16Array (texArraySize);
-
-        ramStats.sizeDataTextureIndices +=texArray.byteLength;
-
-        texArray.fill(0);
-        texArray.set(indices, 0)
-
-        const texture = gl.createTexture();
-
-        gl.bindTexture (gl.TEXTURE_2D, texture);
-
-        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGB16UI, textureWidth, textureHeight);
-
-        gl.texSubImage2D(
-            gl.TEXTURE_2D,
-            0,
-            0,
-            0,
-            textureWidth,
-            textureHeight,
-            gl.RGB_INTEGER,
-            gl.UNSIGNED_SHORT,
-            texArray,
-            0
-        );
-
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-        gl.bindTexture(gl.TEXTURE_2D, null);
-
-        return this.generateBindableTexture(
-            gl,
-            texture,
-            textureWidth,
-            textureHeight
-        );
-    }
-
-    /**
-     * TODO: document
-     */
-    generateTextureFor32BitIndices (gl, indices) {
-        if (indices.length == 0) {
-            return {
-                texture: null,
-                textureHeight: 0,
-            };
-        }
-
-        const textureWidth = 512;
-        const textureHeight = Math.ceil (indices.length / 3 / textureWidth);
-
-        if (textureHeight == 0)
-        {
-            throw "texture height == 0";
-        }
-
-        const texArraySize = textureWidth * textureHeight * 3;
-        const texArray = new Uint32Array (texArraySize);
-
-        ramStats.sizeDataTextureIndices +=texArray.byteLength;
-
-        texArray.fill(0);
-        texArray.set(indices, 0)
-
-        const texture = gl.createTexture();
-
-        gl.bindTexture (gl.TEXTURE_2D, texture);
-
-        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGB32UI, textureWidth, textureHeight);
-
-        gl.texSubImage2D(
-            gl.TEXTURE_2D,
-            0,
-            0,
-            0,
-            textureWidth,
-            textureHeight,
-            gl.RGB_INTEGER,
-            gl.UNSIGNED_INT,
-            texArray,
-            0
-        );
-
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-        gl.bindTexture(gl.TEXTURE_2D, null);
-
-        return this.generateBindableTexture(
-            gl,
-            texture,
-            textureWidth,
-            textureHeight
-        );
-    }
-
-    /**
-     * TODO: comment
-     */
-    generateTextureFor8BitsEdgeIndices (gl, edgeIndices) {
-        if (edgeIndices.length == 0) {
-            return {
-                texture: null,
-                textureHeight: 0,
-            };
-        }
-
-        const textureWidth = 512;
-        const textureHeight = Math.ceil (edgeIndices.length / 2 / textureWidth);
-
-        if (textureHeight == 0)
-        {
-            throw "texture height == 0";
-        }
-
-        const texArraySize = textureWidth * textureHeight * 2;
-        const texArray = new Uint8Array (texArraySize);
-
-        ramStats.sizeDataTextureEdgeIndices +=texArray.byteLength;
-
-        texArray.fill(0);
-        texArray.set(edgeIndices, 0)
-
-        const texture = gl.createTexture();
-
-        gl.bindTexture (gl.TEXTURE_2D, texture);
-
-        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RG8UI, textureWidth, textureHeight);
-
-        gl.texSubImage2D(
-            gl.TEXTURE_2D,
-            0,
-            0,
-            0,
-            textureWidth,
-            textureHeight,
-            gl.RG_INTEGER,
-            gl.UNSIGNED_BYTE,
-            texArray,
-            0
-        );
-
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-        gl.bindTexture(gl.TEXTURE_2D, null);
-
-        return this.generateBindableTexture(
-            gl,
-            texture,
-            textureWidth,
-            textureHeight
-        );
-    }
-
-    /**
-     * TODO: comment
-     */
-    generateTextureFor16BitsEdgeIndices (gl, edgeIndices) {
-        if (edgeIndices.length == 0) {
-            return {
-                texture: null,
-                textureHeight: 0,
-            };
-        }
-
-        const textureWidth = 512;
-        const textureHeight = Math.ceil (edgeIndices.length / 2 / textureWidth);
-
-        if (textureHeight == 0)
-        {
-            throw "texture height == 0";
-        }
-
-        const texArraySize = textureWidth * textureHeight * 2;
-        const texArray = new Uint16Array (texArraySize);
-
-        ramStats.sizeDataTextureEdgeIndices +=texArray.byteLength;
-
-        texArray.fill(0);
-        texArray.set(edgeIndices, 0)
-
-        const texture = gl.createTexture();
-
-        gl.bindTexture (gl.TEXTURE_2D, texture);
-
-        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RG16UI, textureWidth, textureHeight);
-
-        gl.texSubImage2D(
-            gl.TEXTURE_2D,
-            0,
-            0,
-            0,
-            textureWidth,
-            textureHeight,
-            gl.RG_INTEGER,
-            gl.UNSIGNED_SHORT,
-            texArray,
-            0
-        );
-
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-        gl.bindTexture(gl.TEXTURE_2D, null);
-
-        return this.generateBindableTexture(
-            gl,
-            texture,
-            textureWidth,
-            textureHeight
-        );
-    }
-
-    /**
-     * TODO: comment
-     */
-    generateTextureFor32BitsEdgeIndices (gl, edgeIndices) {
-        if (edgeIndices.length == 0) {
-            return {
-                texture: null,
-                textureHeight: 0,
-            };
-        }
-
-        const textureWidth = 512;
-        const textureHeight = Math.ceil (edgeIndices.length / 2 / textureWidth);
-
-        if (textureHeight == 0)
-        {
-            throw "texture height == 0";
-        }
-
-        const texArraySize = textureWidth * textureHeight * 2;
-        const texArray = new Uint32Array (texArraySize);
-
-        ramStats.sizeDataTextureEdgeIndices +=texArray.byteLength;
-
-        texArray.fill(0);
-        texArray.set(edgeIndices, 0)
-
-        const texture = gl.createTexture();
-
-        gl.bindTexture (gl.TEXTURE_2D, texture);
-
-        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RG32UI, textureWidth, textureHeight);
-
-        gl.texSubImage2D(
-            gl.TEXTURE_2D,
-            0,
-            0,
-            0,
-            textureWidth,
-            textureHeight,
-            gl.RG_INTEGER,
-            gl.UNSIGNED_INT,
-            texArray,
-            0
-        );
-
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-        gl.bindTexture(gl.TEXTURE_2D, null);
-
-        return this.generateBindableTexture(
-            gl,
-            texture,
-            textureWidth,
-            textureHeight
-        );
-    }
-
-    /**
-     * @param {*} gl WebGL2Context 
-     * @param {*} positions Array of (uniquified) positions in the layer
-     * 
-     * This will generate a texture for positions in the layer.
-     * 
-     * The texture will have:
-     * - 512 columns, where each pixel will be a 16-bit-per-component RGB texture, corresponding to the XYZ of the position 
-     * - a number of rows R where R*512 is just >= than the number of vertices (positions / 3)
-     * 
-     * @returns The created texture and its height
-     */
-    generateTextureForPositions (gl, positions) {
-        const numVertices = positions.length / 3;
-        const textureWidth = 512;
-        const textureHeight =  Math.ceil (numVertices / textureWidth);
-
-        if (textureHeight == 0)
-        {
-            throw "texture height == 0";
-        }
-
-        const texArraySize = textureWidth * textureHeight * 3;
-        const texArray = new Uint16Array (texArraySize);
-
-        ramStats.sizeDataTexturePositions +=texArray.byteLength;
-
-        texArray.fill(0);
-
-        texArray.set (positions, 0);
-
-        const texture = gl.createTexture();
-
-        gl.bindTexture (gl.TEXTURE_2D, texture);
-
-        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGB16UI, textureWidth, textureHeight);
-
-        gl.texSubImage2D(
-            gl.TEXTURE_2D,
-            0,
-            0,
-            0,
-            textureWidth,
-            textureHeight,
-            gl.RGB_INTEGER,
-            gl.UNSIGNED_SHORT,
-            texArray,
-            0
-        );
-
-        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
-
-        gl.bindTexture(gl.TEXTURE_2D, null);
-
-        return this.generateBindableTexture(
-            gl,
-            texture,
-            textureWidth,
-            textureHeight
-        );
-    }
-
-    /**
-     */
-     generateTextureForPackedPortionIds (gl, portionIdsArray) {
-        if (portionIdsArray.length == 0) {
-            return {
-                texture: null,
-                textureHeight: 0,
-            };
-        }
-        const lenArray = portionIdsArray.length;
-        const textureWidth = 512;
-        const textureHeight = Math.ceil (
-            lenArray /
-            textureWidth
-        );
-
-        if (textureHeight == 0)
-        {
-            throw "texture height == 0";
-        }
-
-        const texArraySize = textureWidth * textureHeight;
-        const texArray = new Uint16Array (texArraySize);
-
-        texArray.set (
-            portionIdsArray,
-            0
-        );
-
-        ramStats.sizeDataTexturePortionIds += texArray.byteLength;
-
-        const texture = gl.createTexture();
-
-        gl.bindTexture (gl.TEXTURE_2D, texture);
-
-        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R16UI, textureWidth, textureHeight);
-
-        gl.texSubImage2D(
-            gl.TEXTURE_2D,
-            0,
-            0,
-            0,
-            textureWidth,
-            textureHeight,
-            gl.RED_INTEGER,
-            gl.UNSIGNED_SHORT,
-            texArray,
-            0
-        );
-
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
-
-        gl.bindTexture(gl.TEXTURE_2D, null);
-
-        return this.generateBindableTexture(
-            gl,
-            texture,
-            textureWidth,
-            textureHeight
-        );
     }
         
     isEmpty() {

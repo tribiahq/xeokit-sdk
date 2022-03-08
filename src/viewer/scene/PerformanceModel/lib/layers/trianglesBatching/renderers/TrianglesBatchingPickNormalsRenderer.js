@@ -31,6 +31,7 @@ class TrianglesBatchingPickNormalsRenderer {
         const camera = scene.camera;
         const gl = scene.canvas.gl;
         const state = batchingLayer._state;
+        const textureState = state.textureState;
         const origin = batchingLayer._state.origin;
 
         if (!this._program) {
@@ -41,17 +42,39 @@ class TrianglesBatchingPickNormalsRenderer {
             frameCtx.lastProgramId = this._program.id;
             this._bindProgram();
         }
+        
+        textureState.texturePerObjectIdPositionsDecodeMatrix.bindTexture (
+            this._program,
+            this._uTexturePerObjectIdPositionsDecodeMatrix, 
+            1
+        );
+
+        textureState.texturePerVertexIdCoordinates.bindTexture (
+            this._program,
+            this._uTexturePerVertexIdCoordinates, 
+            2
+        );
+                
+        textureState.texturePerObjectIdColorsAndFlags.bindTexture (
+            this._program,
+            this._uTexturePerObjectIdColorsAndFlags, 
+            3
+        );
+
+        textureState.textureCameraMatrices.bindTexture (
+            this._program,
+            this._uTextureCameraMatrices, 
+            6
+        );
+
+        textureState.textureModelMatrices.bindTexture (
+            this._program,
+            this._uTextureModelMatrices, 
+            7
+        );
 
         gl.uniform1i(this._uRenderPass, renderPass);
         gl.uniform1i(this._uPickInvisible, frameCtx.pickInvisible);
-
-        gl.uniformMatrix4fv(this._uWorldMatrix, false, model.worldMatrix);
-
-        const pickViewMatrix = frameCtx.pickViewMatrix || camera.viewMatrix;
-        const viewMatrix = origin ? createRTCViewMat(pickViewMatrix, origin) : pickViewMatrix;
-
-        gl.uniformMatrix4fv(this._uViewMatrix, false, viewMatrix);
-        gl.uniformMatrix4fv(this._uProjMatrix, false, frameCtx.pickProjMatrix);
 
         if (scene.logarithmicDepthBufferEnabled) {
             const logDepthBufFC = 2.0 / (Math.log(camera.project.far + 1.0) / Math.LN2);  // TODO: Far should be from projection matrix?
@@ -82,33 +105,56 @@ class TrianglesBatchingPickNormalsRenderer {
             }
         }
 
-        //=============================================================
-        // TODO: Use drawElements count and offset to draw only one entity
-        //=============================================================
+        if (state.numIndices8Bits > 0) {
+            textureState.texturePerPolygonIdPortionIds8Bits.bindTexture (
+                this._program,
+                this._uTexturePerPolygonIdPortionIds, 
+                4
+            );    
+    
+            textureState.texturePerPolygonIdIndices8Bits.bindTexture (
+                this._program,
+                this._uTexturePerPolygonIdIndices, 
+                5
+            );
 
-        gl.uniformMatrix4fv(this._uPositionsDecodeMatrix, false, batchingLayer._state.positionsDecodeMatrix);
-
-        this._aPosition.bindArrayBuffer(state.positionsBuf);
-
-        if (this._aOffset) {
-            this._aOffset.bindArrayBuffer(state.offsetsBuf);
+            gl.drawArrays(gl.TRIANGLES, 0, state.numIndices8Bits);
         }
 
-        if (this._aNormal) {
-            this._aNormal.bindArrayBuffer(state.normalsBuf);
+        if (state.numIndices16Bits > 0) {
+            textureState.texturePerPolygonIdPortionIds16Bits.bindTexture (
+                this._program,
+                this._uTexturePerPolygonIdPortionIds, 
+                4
+            );    
+    
+            textureState.texturePerPolygonIdIndices16Bits.bindTexture (
+                this._program,
+                this._uTexturePerPolygonIdIndices, 
+                5
+            );
+
+            gl.drawArrays(gl.TRIANGLES, 0, state.numIndices16Bits);
+        }
+        
+        if (state.numIndices32Bits > 0) {
+            textureState.texturePerPolygonIdPortionIds32Bits.bindTexture (
+                this._program,
+                this._uTexturePerPolygonIdPortionIds, 
+                4
+            );    
+    
+            textureState.texturePerPolygonIdIndices32Bits.bindTexture (
+                this._program,
+                this._uTexturePerPolygonIdIndices, 
+                5
+            );
+
+            gl.drawArrays(gl.TRIANGLES, 0, state.numIndices32Bits);
         }
 
-        if (this._aFlags) {
-            this._aFlags.bindArrayBuffer(state.flagsBuf);
-        }
 
-        if (this._aFlags2) {
-            this._aFlags2.bindArrayBuffer(state.flags2Buf);
-        }
-
-        state.indicesBuf.bind();
-
-        gl.drawElements(gl.TRIANGLES, state.indicesBuf.numItems, state.indicesBuf.itemType, 0);
+        frameCtx.drawElements++;
     }
 
     _allocate() {
@@ -127,10 +173,7 @@ class TrianglesBatchingPickNormalsRenderer {
 
         this._uRenderPass = program.getLocation("renderPass");
         this._uPickInvisible = program.getLocation("pickInvisible");
-        this._uPositionsDecodeMatrix = program.getLocation("positionsDecodeMatrix");
-        this._uWorldMatrix = program.getLocation("worldMatrix");
-        this._uViewMatrix = program.getLocation("viewMatrix");
-        this._uProjMatrix = program.getLocation("projMatrix");
+
         this._uSectionPlanes = [];
 
         for (let i = 0, len = scene._sectionPlanesState.sectionPlanes.length; i < len; i++) {
@@ -141,15 +184,18 @@ class TrianglesBatchingPickNormalsRenderer {
             });
         }
 
-        this._aPosition = program.getAttribute("position");
-        this._aOffset = program.getAttribute("offset");
-        this._aNormal = program.getAttribute("normal");
-        this._aFlags = program.getAttribute("flags");
-        this._aFlags2 = program.getAttribute("flags2");
-
         if (scene.logarithmicDepthBufferEnabled) {
             this._uLogDepthBufFC = program.getLocation("logDepthBufFC");
         }
+
+        this._uTexturePerObjectIdPositionsDecodeMatrix = "uTexturePerObjectIdPositionsDecodeMatrix"; // chipmunk
+        this._uTexturePerObjectIdColorsAndFlags = "uTexturePerObjectIdColorsAndFlags"; // chipmunk
+        this._uTexturePerVertexIdCoordinates = "uTexturePerVertexIdCoordinates"; // chipmunk
+        this._uTexturePerPolygonIdNormals = "uTexturePerPolygonIdNormals"; // chipmunk
+        this._uTexturePerPolygonIdIndices = "uTexturePerPolygonIdIndices"; // chipmunk
+        this._uTexturePerPolygonIdPortionIds = "uTexturePerPolygonIdPortionIds"; // chipmunk
+        this._uTextureCameraMatrices = "uTextureCameraMatrices"; // chipmunk
+        this._uTextureModelMatrices = "uTextureModelMatrices"; // chipmunk
     }
 
     _bindProgram() {
@@ -167,75 +213,137 @@ class TrianglesBatchingPickNormalsRenderer {
         const scene = this._scene;
         const clipping = scene._sectionPlanesState.sectionPlanes.length > 0;
         const src = [];
+        src.push("#version 300 es");
         src.push("// Triangles batching pick normals vertex shader");
-        if (scene.logarithmicDepthBufferEnabled && WEBGL_INFO.SUPPORTED_EXTENSIONS["EXT_frag_depth"]) {
-            src.push("#extension GL_EXT_frag_depth : enable");
-        }
+
+        src.push("#ifdef GL_FRAGMENT_PRECISION_HIGH");
+        src.push("precision highp float;");
+        src.push("precision highp int;");
+        src.push("precision highp usampler2D;");
+        src.push("precision highp isampler2D;");
+        src.push("precision highp sampler2D;");
+        src.push("#else");
+        src.push("precision mediump float;");
+        src.push("precision mediump int;");
+        src.push("precision mediump usampler2D;");
+        src.push("precision mediump isampler2D;");
+        src.push("precision mediump sampler2D;");
+        src.push("#endif");
+
         src.push("uniform int renderPass;");
-        src.push("attribute vec3 position;");
+
         if (scene.entityOffsetsEnabled) {
-            src.push("attribute vec3 offset;");
+            src.push("in vec3 offset;");
         }
-        src.push("attribute vec3 normal;");
-        src.push("attribute vec4 flags;");
-        src.push("attribute vec4 flags2;");
+
         src.push("uniform bool pickInvisible;");
-        src.push("uniform mat4 worldMatrix;");
-        src.push("uniform mat4 viewMatrix;");
-        src.push("uniform mat4 projMatrix;");
-        src.push("uniform mat4 positionsDecodeMatrix;");
+        src.push("uniform mediump sampler2D uTexturePerObjectIdPositionsDecodeMatrix;"); // chipmunk
+        src.push("uniform lowp usampler2D uTexturePerObjectIdColorsAndFlags;"); // chipmunk
+        src.push("uniform mediump usampler2D uTexturePerVertexIdCoordinates;"); // chipmunk
+        src.push("uniform highp usampler2D uTexturePerPolygonIdIndices;"); // chipmunk
+        src.push("uniform mediump usampler2D uTexturePerPolygonIdPortionIds;"); // chipmunk
+        src.push("uniform highp sampler2D uTextureCameraMatrices;"); // chipmunk
+        src.push("uniform highp sampler2D uTextureModelMatrices;"); // chipmunk
+
+        src.push("vec3 positions[3];")
+
         if (scene.logarithmicDepthBufferEnabled) {
             src.push("uniform float logDepthBufFC;");
-            if (WEBGL_INFO.SUPPORTED_EXTENSIONS["EXT_frag_depth"]) {
-                src.push("varying float vFragDepth;");
-            }
+            src.push("out float vFragDepth;");
             src.push("bool isPerspectiveMatrix(mat4 m) {");
             src.push("    return (m[2][3] == - 1.0);");
             src.push("}");
-            src.push("varying float isPerspective;");
+            src.push("out float isPerspective;");
         }
-        src.push("vec3 octDecode(vec2 oct) {");
-        src.push("    vec3 v = vec3(oct.xy, 1.0 - abs(oct.x) - abs(oct.y));");
-        src.push("    if (v.z < 0.0) {");
-        src.push("        v.xy = (1.0 - abs(v.yx)) * vec2(v.x >= 0.0 ? 1.0 : -1.0, v.y >= 0.0 ? 1.0 : -1.0);");
-        src.push("    }");
-        src.push("    return normalize(v);");
-        src.push("}");
+
         if (clipping) {
-            src.push("varying vec4 vWorldPosition;");
-            src.push("varying vec4 vFlags2;");
+            src.push("out vec4 vWorldPosition;");
+            src.push("out int vFlags2;");
         }
-        src.push("varying vec3 vWorldNormal;");
+
+        src.push("out vec3 vWorldNormal;");
+
         src.push("void main(void) {");
+
+        // camera matrices
+        src.push ("mat4 viewMatrix = mat4 (texelFetch (uTextureCameraMatrices, ivec2(0, 0), 0), texelFetch (uTextureCameraMatrices, ivec2(1, 0), 0), texelFetch (uTextureCameraMatrices, ivec2(2, 0), 0), texelFetch (uTextureCameraMatrices, ivec2(3, 0), 0));");
+        src.push ("mat4 viewNormalMatrix = mat4 (texelFetch (uTextureCameraMatrices, ivec2(0, 1), 0), texelFetch (uTextureCameraMatrices, ivec2(1, 1), 0), texelFetch (uTextureCameraMatrices, ivec2(2, 1), 0), texelFetch (uTextureCameraMatrices, ivec2(3, 1), 0));");
+        src.push ("mat4 projMatrix = mat4 (texelFetch (uTextureCameraMatrices, ivec2(0, 2), 0), texelFetch (uTextureCameraMatrices, ivec2(1, 2), 0), texelFetch (uTextureCameraMatrices, ivec2(2, 2), 0), texelFetch (uTextureCameraMatrices, ivec2(3, 2), 0));");
+
+        // model matrices
+        src.push ("mat4 worldMatrix = mat4 (texelFetch (uTextureModelMatrices, ivec2(0, 0), 0), texelFetch (uTextureModelMatrices, ivec2(1, 0), 0), texelFetch (uTextureModelMatrices, ivec2(2, 0), 0), texelFetch (uTextureModelMatrices, ivec2(3, 0), 0));");
+        src.push ("mat4 worldNormalMatrix = mat4 (texelFetch (uTextureModelMatrices, ivec2(0, 1), 0), texelFetch (uTextureModelMatrices, ivec2(1, 1), 0), texelFetch (uTextureModelMatrices, ivec2(2, 1), 0), texelFetch (uTextureModelMatrices, ivec2(3, 1), 0));");
+
+        // constants
+        src.push("int polygonIndex = gl_VertexID / 3;")
+
+        // get packed object-id
+        src.push("int h_packed_object_id_index = (polygonIndex >> 3) & 511;")
+        src.push("int v_packed_object_id_index = (polygonIndex >> 3) >> 9;")
+
+        src.push("int objectIndex = int(texelFetch(uTexturePerPolygonIdPortionIds, ivec2(h_packed_object_id_index, v_packed_object_id_index), 0).r);");
+
+        // get flags & flags2
+        src.push("uvec4 flags = texelFetch (uTexturePerObjectIdColorsAndFlags, ivec2(2, objectIndex), 0);"); // chipmunk
+        src.push("uvec4 flags2 = texelFetch (uTexturePerObjectIdColorsAndFlags, ivec2(3, objectIndex), 0);"); // chipmunk
+        
         // flags.w = NOT_RENDERED | PICK
         // renderPass = PICK
+
         src.push(`if (int(flags.w) != renderPass) {`);
-        src.push("      gl_Position = vec4(0.0, 0.0, 0.0, 0.0);"); // Cull vertex
-        src.push("  } else {");
-        src.push("      vec4 worldPosition = worldMatrix * (positionsDecodeMatrix * vec4(position, 1.0)); ");
+        src.push("   gl_Position = vec4(3.0, 3.0, 3.0, 1.0);"); // Cull vertex
+        src.push("   return;"); // Cull vertex
+        src.push("} else {");
+
+        // get vertex base
+        src.push("ivec4 packedVertexBase = ivec4(texelFetch (uTexturePerObjectIdColorsAndFlags, ivec2(4, objectIndex), 0));"); // chipmunk
+
+        src.push("int h_index = polygonIndex & 511;")
+        src.push("int v_index = polygonIndex >> 9;")
+
+        src.push("ivec3 vertexIndices = ivec3(texelFetch(uTexturePerPolygonIdIndices, ivec2(h_index, v_index), 0));");
+        src.push("ivec3 uniqueVertexIndexes = vertexIndices + (packedVertexBase.r << 24) + (packedVertexBase.g << 16) + (packedVertexBase.b << 8) + packedVertexBase.a;")
+        
+        src.push("ivec3 indexPositionH = uniqueVertexIndexes & 511;")
+        src.push("ivec3 indexPositionV = uniqueVertexIndexes >> 9;")
+
+        src.push("mat4 positionsDecodeMatrix = mat4 (texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(0, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(1, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(2, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(3, objectIndex), 0));")
+
+        // get position
+        src.push("positions[0] = vec3(texelFetch(uTexturePerVertexIdCoordinates, ivec2(indexPositionH.r, indexPositionV.r), 0));")
+        src.push("positions[1] = vec3(texelFetch(uTexturePerVertexIdCoordinates, ivec2(indexPositionH.g, indexPositionV.g), 0));")
+        src.push("positions[2] = vec3(texelFetch(uTexturePerVertexIdCoordinates, ivec2(indexPositionH.b, indexPositionV.b), 0));")
+
+        // get normal
+        src.push("vec3 normal = normalize(cross(positions[2] - positions[0], positions[1] - positions[0]));");
+
+        src.push("vec3 position = positions[gl_VertexID % 3];");
+        
+        src.push("vec4 worldPosition = worldMatrix * (positionsDecodeMatrix * vec4(position, 1.0)); ");
+
         if (scene.entityOffsetsEnabled) {
-            src.push("      worldPosition.xyz = worldPosition.xyz + offset;");
+            src.push("worldPosition.xyz = worldPosition.xyz + offset;");
         }
-        src.push("      vec4 viewPosition  = viewMatrix * worldPosition; ");
-        src.push("      vec3 worldNormal =  octDecode(normal.xy); ");
-        src.push("      vWorldNormal = worldNormal;");
-        if (clipping) {
-            src.push("      vWorldPosition = worldPosition;");
-            src.push("      vFlags2 = flags2;");
-        }
+
+        src.push("vec4 viewPosition = viewMatrix * worldPosition; ");
+
+        src.push("vec4 worldNormal =  worldNormalMatrix * vec4(normal, 1); ");
+
+        src.push("vWorldNormal = worldNormal.xyz;");
         src.push("vec4 clipPos = projMatrix * viewPosition;");
         if (scene.logarithmicDepthBufferEnabled) {
-            if (WEBGL_INFO.SUPPORTED_EXTENSIONS["EXT_frag_depth"]) {
-                src.push("vFragDepth = 1.0 + clipPos.w;");
-            } else {
-                src.push("clipPos.z = log2( max( 1e-6, clipPos.w + 1.0 ) ) * logDepthBufFC - 1.0;");
-                src.push("clipPos.z *= clipPos.w;");
-            }
+            src.push("vFragDepth = 1.0 + clipPos.w;");
             src.push("isPerspective = float (isPerspectiveMatrix(projMatrix));");
         }
+        if (clipping) {
+            src.push("      vWorldPosition = worldPosition;");
+            src.push("      vFlags2 = flags2.w;");
+        }
         src.push("gl_Position = clipPos;");
-        src.push("  }");
         src.push("}");
+
+        src.push("}");
+
         return src;
     }
 
@@ -244,10 +352,8 @@ class TrianglesBatchingPickNormalsRenderer {
         const sectionPlanesState = scene._sectionPlanesState;
         const clipping = sectionPlanesState.sectionPlanes.length > 0;
         const src = [];
+        src.push ('#version 300 es');
         src.push("// Triangles batching pick normals fragment shader");
-        if (scene.logarithmicDepthBufferEnabled && WEBGL_INFO.SUPPORTED_EXTENSIONS["EXT_frag_depth"]) {
-            src.push("#extension GL_EXT_frag_depth : enable");
-        }
         src.push("#ifdef GL_FRAGMENT_PRECISION_HIGH");
         src.push("precision highp float;");
         src.push("precision highp int;");
@@ -255,10 +361,11 @@ class TrianglesBatchingPickNormalsRenderer {
         src.push("precision mediump float;");
         src.push("precision mediump int;");
         src.push("#endif");
-        if (scene.logarithmicDepthBufferEnabled && WEBGL_INFO.SUPPORTED_EXTENSIONS["EXT_frag_depth"]) {
-            src.push("varying float isPerspective;");
+
+        if (scene.logarithmicDepthBufferEnabled) {
+            src.push("in float isPerspective;");
             src.push("uniform float logDepthBufFC;");
-            src.push("varying float vFragDepth;");
+            src.push("in float vFragDepth;");
         }
         if (clipping) {
             src.push("varying vec4 vWorldPosition;");
@@ -269,10 +376,11 @@ class TrianglesBatchingPickNormalsRenderer {
                 src.push("uniform vec3 sectionPlaneDir" + i + ";");
             }
         }
-        src.push("varying vec3 vWorldNormal;");
+        src.push("in vec3 vWorldNormal;");
+        src.push("out vec4 outNormal;");
         src.push("void main(void) {");
         if (clipping) {
-            src.push("  bool clippable = (float(vFlags2.x) > 0.0);");
+            src.push("  bool clippable = (vFlags2 > 0.0);");
             src.push("  if (clippable) {");
             src.push("      float dist = 0.0;");
             for (var i = 0; i < sectionPlanesState.sectionPlanes.length; i++) {
@@ -283,10 +391,12 @@ class TrianglesBatchingPickNormalsRenderer {
             src.push("      if (dist > 0.0) { discard; }");
             src.push("  }");
         }
-        if (scene.logarithmicDepthBufferEnabled && WEBGL_INFO.SUPPORTED_EXTENSIONS["EXT_frag_depth"]) {
-            src.push("    gl_FragDepthEXT = isPerspective == 0.0 ? gl_FragCoord.z : log2( vFragDepth ) * logDepthBufFC * 0.5;");
+
+        if (scene.logarithmicDepthBufferEnabled) {
+            // src.push("    gl_FragDepth = isPerspective == 0.0 ? gl_FragCoord.z : log2( vFragDepth ) * logDepthBufFC * 0.5;");
+            src.push("    gl_FragDepth = log2( vFragDepth ) * logDepthBufFC * 0.5;");
         }
-        src.push("    gl_FragColor = vec4((vWorldNormal * 0.5) + 0.5, 1.0);");
+        src.push("    outNormal = vec4((vWorldNormal * 0.5) + 0.5, 1.0);");
         src.push("}");
         return src;
     }

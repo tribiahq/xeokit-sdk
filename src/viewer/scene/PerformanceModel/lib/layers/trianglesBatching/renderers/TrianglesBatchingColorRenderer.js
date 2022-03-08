@@ -428,7 +428,7 @@ class TrianglesBatchingColorRenderer {
         src.push("uvec4 color = texelFetch (uTexturePerObjectIdColorsAndFlags, ivec2(0, objectIndex), 0);"); // chipmunk
         
         // get normal
-        src.push("vec3 normal = normalize(cross(positions[1] - positions[0], positions[2] - positions[0]));");
+        src.push("vec3 normal = normalize(cross(positions[2] - positions[0], positions[1] - positions[0]));");
 
         src.push("vec3 position = positions[gl_VertexID % 3];");
         
