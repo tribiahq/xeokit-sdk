@@ -328,9 +328,6 @@ class TrianglesBatchingPickMeshRenderer {
         // get pick-color
         src.push("vPickColor = vec4(texelFetch (uTexturePerObjectIdColorsAndFlags, ivec2(1, objectIndex), 0)) / 255.0;");
 
-        // get normal
-        //src.push("vec3 normal = normalize(cross(positions[1] - positions[0], positions[2] - positions[0]));");
-
         src.push("vec3 position = positions[gl_VertexID % 3];");
         
         src.push("vec4 worldPosition = worldMatrix * (positionsDecodeMatrix * vec4(position, 1.0)); ");
