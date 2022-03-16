@@ -960,6 +960,7 @@ class PerformanceModel extends Component {
         this._lastDecodeMatrix = null;
         this._lastNormals = null;
 
+        this._currentTrianglesInstancingLayer = null;
         this._instancingLayers = {};
         this._currentBatchingLayers = {};
 
@@ -1809,12 +1810,15 @@ class PerformanceModel extends Component {
             this.error("WebGL instanced arrays not supported"); // TODO: Gracefully use batching?
             return;
         }
+
+        this.initializeTrianglesInstancingLayerIfNeeded ();
+
         const geometryId = cfg.id;
         if (geometryId === undefined || geometryId === null) {
             this.error("Config missing: id");
             return;
         }
-        if (this._instancingLayers[geometryId]) {
+        if (this._currentTrianglesInstancingLayer.hasGeometry (geometryId)) {
             this.error("Geometry already created: " + geometryId);
             return;
         }
@@ -1830,35 +1834,48 @@ class PerformanceModel extends Component {
 
         switch (primitive) {
             case "triangles":
-                instancingLayer = new TrianglesInstancingLayer(this, utils.apply({
-                    origin,
-                    layerIndex: 0,
-                    solid: true
-                }, cfg));
-                this._numTriangles += (cfg.indices ? Math.round(cfg.indices.length / 3) : 0);
-                break;
             case "solid":
-                instancingLayer = new TrianglesInstancingLayer(this, utils.apply({
-                    origin,
-                    layerIndex: 0,
-                    solid: true
-                }, cfg));
-                this._numTriangles += (cfg.indices ? Math.round(cfg.indices.length / 3) : 0);
-                break;
             case "surface":
-                instancingLayer = new TrianglesInstancingLayer(this, utils.apply({
-                    origin,
-                    layerIndex: 0,
-                    solid: false
-                }, cfg));
+                // instancingLayer = new TrianglesInstancingLayer(this, utils.apply({
+                //     origin,
+                //     layerIndex: 0,
+                //     solid: true
+                // }, cfg));
+
+                this._currentTrianglesInstancingLayer.registerGeometry (utils.apply(
+                    {
+                        origin,
+                        layerIndex: 0,
+                        solid: primitive !== "surface"
+                    },
+                    cfg
+                ));
+    
                 this._numTriangles += (cfg.indices ? Math.round(cfg.indices.length / 3) : 0);
                 break;
+            // case "solid":
+            //     instancingLayer = new TrianglesInstancingLayer(this, utils.apply({
+            //         origin,
+            //         layerIndex: 0,
+            //         solid: true
+            //     }, cfg));
+            //     this._numTriangles += (cfg.indices ? Math.round(cfg.indices.length / 3) : 0);
+            //     break;
+            // case "surface":
+            //     instancingLayer = new TrianglesInstancingLayer(this, utils.apply({
+            //         origin,
+            //         layerIndex: 0,
+            //         solid: false
+            //     }, cfg));
+            //     this._numTriangles += (cfg.indices ? Math.round(cfg.indices.length / 3) : 0);
+            //     break;
             case "lines":
                 instancingLayer = new LinesInstancingLayer(this, utils.apply({
                     origin,
                     layerIndex: 0
                 }, cfg));
                 this._numLines += (cfg.indices ? Math.round(cfg.indices.length / 2) : 0);
+                this._layerList.push(instancingLayer);
                 break;
             case "points":
                 instancingLayer = new PointsInstancingLayer(this, utils.apply({
@@ -1866,13 +1883,23 @@ class PerformanceModel extends Component {
                     layerIndex: 0
                 }, cfg));
                 this._numPoints += (cfg.positions ? Math.round(cfg.positions.length / 3) : 0);
+                this._layerList.push(instancingLayer);
                 break;
         }
-        this._instancingLayers[geometryId] = instancingLayer;
-        this._layerList.push(instancingLayer);
         this.numGeometries++;
     }
 
+    initializeTrianglesInstancingLayerIfNeeded ()
+    {
+        if (this._currentTrianglesInstancingLayer) {
+            return;
+        }
+
+        this._currentTrianglesInstancingLayer = new TrianglesInstancingLayer(this, {
+            layerIndex: this._layerList.length
+        });
+        this._layerList.push(this._currentTrianglesInstancingLayer);
+    }
     /**
      * Creates a mesh within this PerformanceModel.
      *
@@ -1942,7 +1969,8 @@ class PerformanceModel extends Component {
                 this.error("WebGL instanced arrays not supported"); // TODO: Gracefully use batching?
                 return;
             }
-            if (!this._instancingLayers[geometryId]) {
+            if ((this._currentTrianglesInstancingLayer && !this._currentTrianglesInstancingLayer.hasGeometry(geometryId)) &&
+                !this._instancingLayers[geometryId]) {
                 this.error("Geometry not found: " + geometryId + " - ensure that you create it first with createGeometry()");
                 return;
             }
@@ -1984,11 +2012,19 @@ class PerformanceModel extends Component {
                 meshMatrix = math.composeMat4(position, defaultQuaternion, scale, tempMat4);
             }
 
-            const instancingLayer = this._instancingLayers[geometryId];
+            let instancingLayer;
+
+            if (this._currentTrianglesInstancingLayer &&
+                this._currentTrianglesInstancingLayer.hasGeometry(geometryId)) {
+                instancingLayer = this._currentTrianglesInstancingLayer;
+            } else {
+                instancingLayer = this._instancingLayers[geometryId];
+            }
 
             layer = instancingLayer;
 
             portionId = instancingLayer.createPortion({
+                geometryId: geometryId,
                 color: color,
                 metallic: metallic,
                 roughness: roughness,
@@ -2005,7 +2041,7 @@ class PerformanceModel extends Component {
             this._numTriangles += numTriangles;
             mesh.numTriangles = numTriangles;
 
-            mesh.origin = instancingLayer.origin;
+            mesh.origin = instancingLayer.getGeometryOrigin (geometryId);
 
         } else { // Batching
 
@@ -2387,6 +2423,10 @@ class PerformanceModel extends Component {
 
         if (this.destroyed) {
             return;
+        }
+
+        if (this._currentTrianglesInstancingLayer) {
+            this._currentTrianglesInstancingLayer.finalize ();
         }
 
         for (const geometryId in this._instancingLayers) {

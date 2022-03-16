@@ -74,6 +74,8 @@ class TrianglesBatchingLayer {
      */
     constructor(model, cfg) {
 
+        console.log ("create batching layer");
+
         this._layerNumber = _numberOfLayers++;
         ramStats.numberOfLayers++;
 
@@ -816,6 +818,8 @@ class TrianglesBatchingLayer {
 
         this._buffer = null;
         this._finalized = true;
+
+        console.log (ramStats);
 
         _lastCanCreatePortion.buckets = null;
     }
