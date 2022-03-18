@@ -155,7 +155,9 @@ class TrianglesInstancingLayer {
         {
             this.model.cameraTexture = this.dataTextureGenerator.generateCameraDataTexture (
                 this.model.scene.canvas.gl,
-                this.model
+                this.model.scene.camera,
+                this.model.scene,
+                [ 0, 0, 0 ]
             );
         }
 
