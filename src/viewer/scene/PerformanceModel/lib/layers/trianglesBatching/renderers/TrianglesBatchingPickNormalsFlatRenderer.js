@@ -358,12 +358,12 @@ class TrianglesBatchingPickNormalsFlatRenderer {
         // src.push("int objectIndex = int(packedVertexId.g) & 1023;");
         src.push("int polygonIndex = gl_VertexID / 3;")
 
-        src.push("int h_normal_index = polygonIndex & 511;")
-        src.push("int v_normal_index = polygonIndex >> 9;")
+        src.push("int h_normal_index = polygonIndex & 1023;")
+        src.push("int v_normal_index = polygonIndex >> 10;")
 
         // get packed object-id
-        src.push("int h_packed_object_id_index = ((polygonIndex >> 3) / 2) & 511;")
-        src.push("int v_packed_object_id_index = ((polygonIndex >> 3) / 2) >> 9;")
+        src.push("int h_packed_object_id_index = ((polygonIndex >> 3) / 2) & 1023;")
+        src.push("int v_packed_object_id_index = ((polygonIndex >> 3) / 2) >> 10;")
 
         src.push("ivec3 packedObjectId = ivec3(texelFetch(uTexturePerPolygonIdPortionIds, ivec2(h_packed_object_id_index, v_packed_object_id_index), 0).rgb);");
 
@@ -377,14 +377,14 @@ class TrianglesBatchingPickNormalsFlatRenderer {
         // get vertex base
         src.push("ivec4 packedVertexBase = ivec4(texelFetch (uTexturePerObjectIdColorsAndFlags, ivec2(4, objectIndex), 0));"); // chipmunk
 
-        src.push("int h_index = polygonIndex & 511;")
-        src.push("int v_index = polygonIndex >> 9;")
+        src.push("int h_index = polygonIndex & 1023;")
+        src.push("int v_index = polygonIndex >> 10;")
 
         src.push("ivec3 vertexIndices = ivec3(texelFetch(uTexturePerPolygonIdIndices, ivec2(h_index, v_index), 0));");
         src.push("ivec3 uniqueVertexIndexes = vertexIndices + (packedVertexBase.r << 24) + (packedVertexBase.g << 16) + (packedVertexBase.b << 8) + packedVertexBase.a;")
         
-        src.push("ivec3 indexPositionH = uniqueVertexIndexes & 511;")
-        src.push("ivec3 indexPositionV = uniqueVertexIndexes >> 9;")
+        src.push("ivec3 indexPositionH = uniqueVertexIndexes & 1023;")
+        src.push("ivec3 indexPositionV = uniqueVertexIndexes >> 10;")
 
         src.push("mat4 positionsDecodeMatrix = mat4 (texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(0, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(1, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(2, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(3, objectIndex), 0));")
 

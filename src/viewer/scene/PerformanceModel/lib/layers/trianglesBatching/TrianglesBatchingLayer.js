@@ -819,7 +819,7 @@ class TrianglesBatchingLayer {
         this._buffer = null;
         this._finalized = true;
 
-        console.log (ramStats);
+        // console.log (ramStats);
 
         _lastCanCreatePortion.buckets = null;
     }

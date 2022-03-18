@@ -289,8 +289,8 @@ class TrianglesBatchingPickMeshRenderer {
         src.push("int polygonIndex = gl_VertexID / 3;")
 
         // get packed object-id
-        src.push("int h_packed_object_id_index = (polygonIndex >> 3) & 511;")
-        src.push("int v_packed_object_id_index = (polygonIndex >> 3) >> 9;")
+        src.push("int h_packed_object_id_index = (polygonIndex >> 3) & 1023;")
+        src.push("int v_packed_object_id_index = (polygonIndex >> 3) >> 10;")
 
         src.push("int objectIndex = int(texelFetch(uTexturePerPolygonIdPortionIds, ivec2(h_packed_object_id_index, v_packed_object_id_index), 0).r);");
 
@@ -309,14 +309,14 @@ class TrianglesBatchingPickMeshRenderer {
         // get vertex base
         src.push("ivec4 packedVertexBase = ivec4(texelFetch (uTexturePerObjectIdColorsAndFlags, ivec2(4, objectIndex), 0));"); // chipmunk
 
-        src.push("int h_index = polygonIndex & 511;")
-        src.push("int v_index = polygonIndex >> 9;")
+        src.push("int h_index = polygonIndex & 1023;")
+        src.push("int v_index = polygonIndex >> 10;")
 
         src.push("ivec3 vertexIndices = ivec3(texelFetch(uTexturePerPolygonIdIndices, ivec2(h_index, v_index), 0));");
         src.push("ivec3 uniqueVertexIndexes = vertexIndices + (packedVertexBase.r << 24) + (packedVertexBase.g << 16) + (packedVertexBase.b << 8) + packedVertexBase.a;")
         
-        src.push("ivec3 indexPositionH = uniqueVertexIndexes & 511;")
-        src.push("ivec3 indexPositionV = uniqueVertexIndexes >> 9;")
+        src.push("ivec3 indexPositionH = uniqueVertexIndexes & 1023;")
+        src.push("ivec3 indexPositionV = uniqueVertexIndexes >> 10;")
 
         src.push("mat4 positionsDecodeMatrix = mat4 (texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(0, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(1, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(2, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(3, objectIndex), 0));")
         src.push("mat4 entityMatrix = mat4 (texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(4, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(5, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(6, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(7, objectIndex), 0));")
