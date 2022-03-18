@@ -1974,6 +1974,9 @@ class PerformanceModel extends Component {
                 this.error("Geometry not found: " + geometryId + " - ensure that you create it first with createGeometry()");
                 return;
             }
+        } else {
+            // chipmunk: remove
+            return;
         }
 
         let layer;
@@ -2355,6 +2358,7 @@ class PerformanceModel extends Component {
             const meshId = meshIds[i];
             const mesh = this._meshes[meshId];
             if (!mesh) {
+                return; // chipmunk: remove
                 this.error("Mesh with this ID not found: " + meshId + " - ignoring this mesh");
                 continue;
             }
