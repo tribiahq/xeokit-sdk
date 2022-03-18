@@ -961,6 +961,10 @@ class PerformanceModel extends Component {
         this._lastNormals = null;
 
         this._currentTrianglesInstancingLayer = null;
+        this._allTrianglesInstancingLayers = [];
+
+        this._instancingGeometries = {};
+
         this._instancingLayers = {};
         this._currentBatchingLayers = {};
 
@@ -1842,14 +1846,22 @@ class PerformanceModel extends Component {
                 //     solid: true
                 // }, cfg));
 
-                this._currentTrianglesInstancingLayer.registerGeometry (utils.apply(
+                this._instancingGeometries [cfg.id] = utils.apply(
                     {
                         origin,
                         layerIndex: 0,
                         solid: primitive !== "surface"
                     },
                     cfg
-                ));
+                );
+                // this._currentTrianglesInstancingLayer.registerGeometry (utils.apply(
+                //     {
+                //         origin,
+                //         layerIndex: 0,
+                //         solid: primitive !== "surface"
+                //     },
+                //     cfg
+                // ));
     
                 this._numTriangles += (cfg.indices ? Math.round(cfg.indices.length / 3) : 0);
                 break;
@@ -1898,6 +1910,11 @@ class PerformanceModel extends Component {
         this._currentTrianglesInstancingLayer = new TrianglesInstancingLayer(this, {
             layerIndex: this._layerList.length
         });
+
+        this._allTrianglesInstancingLayers.push (
+            this._currentTrianglesInstancingLayer
+        );
+        
         this._layerList.push(this._currentTrianglesInstancingLayer);
     }
     /**
@@ -1969,8 +1986,7 @@ class PerformanceModel extends Component {
                 this.error("WebGL instanced arrays not supported"); // TODO: Gracefully use batching?
                 return;
             }
-            if ((this._currentTrianglesInstancingLayer && !this._currentTrianglesInstancingLayer.hasGeometry(geometryId)) &&
-                !this._instancingLayers[geometryId]) {
+            if (!this._currentTrianglesInstancingLayer && !this._instancingLayers[geometryId]) {
                 this.error("Geometry not found: " + geometryId + " - ensure that you create it first with createGeometry()");
                 return;
             }
@@ -2014,9 +2030,24 @@ class PerformanceModel extends Component {
 
             let instancingLayer;
 
-            if (this._currentTrianglesInstancingLayer &&
-                this._currentTrianglesInstancingLayer.hasGeometry(geometryId)) {
+            if (this._currentTrianglesInstancingLayer) {
                 instancingLayer = this._currentTrianglesInstancingLayer;
+
+                if (instancingLayer._numPortions >= (1 << 13)) {
+                    this._currentTrianglesInstancingLayer.finalize ();
+
+                    this._currentTrianglesInstancingLayer = null;
+
+                    this.initializeTrianglesInstancingLayerIfNeeded ();
+
+                    instancingLayer = this._currentTrianglesInstancingLayer;
+                }
+
+                if (!instancingLayer.hasGeometry(geometryId)) {
+                    instancingLayer.registerGeometry (
+                        this._instancingGeometries[geometryId]
+                    );
+                }
             } else {
                 instancingLayer = this._instancingLayers[geometryId];
             }
@@ -2440,6 +2471,7 @@ class PerformanceModel extends Component {
             }
         }
         this._currentBatchingLayers = {};
+        this._instancingGeometries = {};
 
         for (let i = 0, len = this._nodeList.length; i < len; i++) {
             const node = this._nodeList[i];
