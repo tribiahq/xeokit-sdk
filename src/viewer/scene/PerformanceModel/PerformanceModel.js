@@ -1974,9 +1974,6 @@ class PerformanceModel extends Component {
                 this.error("Geometry not found: " + geometryId + " - ensure that you create it first with createGeometry()");
                 return;
             }
-        } else {
-            // chipmunk: remove
-            return;
         }
 
         let layer;
@@ -2045,7 +2042,6 @@ class PerformanceModel extends Component {
             mesh.numTriangles = numTriangles;
 
             mesh.origin = instancingLayer.getGeometryOrigin (geometryId);
-
         } else { // Batching
 
             let primitive = cfg.primitive || "triangles";
@@ -2306,7 +2302,7 @@ class PerformanceModel extends Component {
 
             mesh.origin = origin;
         }
-
+        
         mesh.parent = null; // Will be set within PerformanceModelNode constructor
         mesh._layer = layer;
         mesh._portionId = portionId;
@@ -2358,7 +2354,6 @@ class PerformanceModel extends Component {
             const meshId = meshIds[i];
             const mesh = this._meshes[meshId];
             if (!mesh) {
-                return; // chipmunk: remove
                 this.error("Mesh with this ID not found: " + meshId + " - ignoring this mesh");
                 continue;
             }

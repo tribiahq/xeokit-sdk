@@ -1,6 +1,8 @@
 import { createRTCViewMat } from "../../../math/rtcCoords.js";
 import { Float16Array, isFloat16Array, getFloat16, setFloat16, hfround, } from "./float16.js";
 
+const identityMatrix = [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+
 const ramStats = {
     sizeDataColorsAndFlags: 0,
     sizeDataPositionDecodeMatrices: 0,
@@ -604,12 +606,28 @@ class DataTextureGenerator
                     i * 48 + 16
                 );
             }
+            else
+            {
+                // 4 values
+                texArray.set (
+                    identityMatrix,
+                    i * 48 + 16
+                );
+            }
             
             if (instancesNormalMatrices)
             {
                 // 4 values
                 texArray.set (
                     instanceMatrices [i],
+                    i * 48 + 32
+                );
+            }
+            else
+            {
+                // 4 values
+                texArray.set (
+                    identityMatrix,
                     i * 48 + 32
                 );
             }

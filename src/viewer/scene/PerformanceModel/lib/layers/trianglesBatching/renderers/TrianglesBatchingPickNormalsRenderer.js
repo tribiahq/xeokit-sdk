@@ -308,7 +308,10 @@ class TrianglesBatchingPickNormalsRenderer {
         src.push("ivec3 indexPositionV = uniqueVertexIndexes >> 9;")
 
         src.push("mat4 positionsDecodeMatrix = mat4 (texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(0, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(1, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(2, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(3, objectIndex), 0));")
+        src.push("mat4 entityMatrix = mat4 (texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(4, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(5, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(6, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(7, objectIndex), 0));")
 
+        src.push("positionsDecodeMatrix = entityMatrix * positionsDecodeMatrix;")
+        
         // get position
         src.push("positions[0] = vec3(texelFetch(uTexturePerVertexIdCoordinates, ivec2(indexPositionH.r, indexPositionV.r), 0));")
         src.push("positions[1] = vec3(texelFetch(uTexturePerVertexIdCoordinates, ivec2(indexPositionH.g, indexPositionV.g), 0));")
@@ -327,7 +330,9 @@ class TrianglesBatchingPickNormalsRenderer {
 
         src.push("vec4 viewPosition = viewMatrix * worldPosition; ");
 
-        src.push("vec4 worldNormal =  worldNormalMatrix * vec4(normal, 1); ");
+        src.push("mat4 entityNormalMatrix = mat4 (texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(8, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(9, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(10, objectIndex), 0), texelFetch (uTexturePerObjectIdPositionsDecodeMatrix, ivec2(11, objectIndex), 0));")
+
+        src.push("vec4 worldNormal =  worldNormalMatrix * (vec4(normal, 1) * entityNormalMatrix); ");
 
         src.push("vWorldNormal = worldNormal.xyz;");
         src.push("vec4 clipPos = projMatrix * viewPosition;");

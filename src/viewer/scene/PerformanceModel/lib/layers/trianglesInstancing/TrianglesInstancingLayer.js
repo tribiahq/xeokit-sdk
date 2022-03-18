@@ -111,7 +111,13 @@ class TrianglesInstancingLayer {
             positionsDecodeMatrix: math.mat4(),
             numInstances: 0,
             obb: math.OBB3(),
-            origin: null
+            origin: null,
+            numIndices8Bits: 0,
+            numIndices16Bits: 0,
+            numIndices32Bits: 0,
+            numEdgeIndices8Bits: 0,
+            numEdgeIndices16Bits: 0,
+            numEdgeIndices32Bits: 0,
         };
          
         /**
@@ -150,18 +156,6 @@ class TrianglesInstancingLayer {
          * @type {DataTextureGenerator}
          */
         this.dataTextureGenerator = new DataTextureGenerator();
-
-        if (!this.model.cameraTexture)
-        {
-            this.model.cameraTexture = this.dataTextureGenerator.generateCameraDataTexture (
-                this.model.scene.canvas.gl,
-                this.model.scene.camera,
-                this.model.scene,
-                [ 0, 0, 0 ]
-            );
-        }
-
-        this._dataTextureState.textureCameraMatrices = this.model.cameraTexture;
 
         // These counts are used to avoid unnecessary render passes
         this._numPortions = 0;
@@ -265,6 +259,11 @@ class TrianglesInstancingLayer {
             edgeIndices: edgeIndices
         });
 
+        // TODO: move to DataPerGeometry
+        cfg._numPositions = uniquePositions.length / 3;
+        cfg._numTriangles = uniqueIndices.length / 3;
+        cfg._numEdges = uniqueEdgeIndices.length / 2;
+
         // Indices alignement
         {
             const alignedIndicesLen = Math.ceil ((uniqueIndices.length / 3) / INDICES_EDGE_INDICES_ALIGNEMENT_SIZE) * INDICES_EDGE_INDICES_ALIGNEMENT_SIZE * 3;
@@ -337,18 +336,18 @@ class TrianglesInstancingLayer {
                     buffer.indices32Bits.push(uniqueIndices[i+2]);
                 }
 
-                if ((triangleNumber % INDICES_EDGE_INDICES_ALIGNEMENT_SIZE) == 0) {
-                    if (numUniquePositions <= (1<< 8)) {
-                        // TODO: per-geometry?
-                        buffer._portionIdForIndices8Bits.push (this._numPortions);
-                    } else if (numUniquePositions <= (1<< 16)) {
-                        // TODO: per-geometry?
-                        buffer._portionIdForIndices16Bits.push (this._numPortions);
-                    } else {
-                        // TODO: per-geometry?
-                        buffer._portionIdForIndices32Bits.push (this._numPortions);
-                    }
-                }
+                // if ((triangleNumber % INDICES_EDGE_INDICES_ALIGNEMENT_SIZE) == 0) {
+                //     if (numUniquePositions <= (1<< 8)) {
+                //         // TODO: per-geometry?
+                //         buffer._portionIdForIndices8Bits.push (this._numPortions);
+                //     } else if (numUniquePositions <= (1<< 16)) {
+                //         // TODO: per-geometry?
+                //         buffer._portionIdForIndices16Bits.push (this._numPortions);
+                //     } else {
+                //         // TODO: per-geometry?
+                //         buffer._portionIdForIndices32Bits.push (this._numPortions);
+                //     }
+                // }
 
                 triangleNumber++;
             }
@@ -370,18 +369,18 @@ class TrianglesInstancingLayer {
                     buffer.edgeIndices32Bits.push(uniqueEdgeIndices[i+1]);
                 }
 
-                if ((edgeNumber % INDICES_EDGE_INDICES_ALIGNEMENT_SIZE) == 0) {
-                    if (numUniquePositions <= (1<< 8)) {
-                        // TODO: per-geometry?
-                        buffer._portionIdForEdges8Bits.push (this._numPortions);
-                    } else if (numUniquePositions <= (1<< 16)) {
-                        // TODO: per-geometry?
-                        buffer._portionIdForEdges16Bits.push (this._numPortions);
-                    } else {
-                        // TODO: per-geometry?
-                        buffer._portionIdForEdges32Bits.push (this._numPortions);
-                    }
-                }
+                // if ((edgeNumber % INDICES_EDGE_INDICES_ALIGNEMENT_SIZE) == 0) {
+                //     if (numUniquePositions <= (1<< 8)) {
+                //         // TODO: per-geometry?
+                //         buffer._portionIdForEdges8Bits.push (this._numPortions);
+                //     } else if (numUniquePositions <= (1<< 16)) {
+                //         // TODO: per-geometry?
+                //         buffer._portionIdForEdges16Bits.push (this._numPortions);
+                //     } else {
+                //         // TODO: per-geometry?
+                //         buffer._portionIdForEdges32Bits.push (this._numPortions);
+                //     }
+                // }
 
                 edgeNumber++;
             }
@@ -439,10 +438,10 @@ class TrianglesInstancingLayer {
     createPortion(cfg) {
         const geometryId = cfg.geometryId;
 
+        const geometryData = this.getGeometryData (geometryId)
+
         if (!this._alreadyLoadedGeometries [geometryId]) {
-            this.loadGeometryData (
-                this.getGeometryData (geometryId)
-            );
+            this.loadGeometryData (geometryData);
         }
 
         const color = cfg.color;
@@ -459,11 +458,71 @@ class TrianglesInstancingLayer {
         }
 
         const buffer = this._buffer;
+        const state = this._state;
 
         /**
          * @type {DataPerGeometry}
          */
         const dataPerGeometry = this._dataPerGeometry[geometryId];
+
+        const numUniquePositions = geometryData._numPositions;
+
+        for (let i = 0, len = geometryData._numTriangles; i < len; i++) {
+            if ((i % INDICES_EDGE_INDICES_ALIGNEMENT_SIZE) == 0) {
+                if (numUniquePositions <= (1<< 8)) {
+                    // TODO: per-geometry?
+                    buffer._portionIdForIndices8Bits.push (this._numPortions);
+                } else if (numUniquePositions <= (1<< 16)) {
+                    // TODO: per-geometry?
+                    buffer._portionIdForIndices16Bits.push (this._numPortions);
+                } else {
+                    // TODO: per-geometry?
+                    buffer._portionIdForIndices32Bits.push (this._numPortions);
+                }
+            }
+        }
+
+        if (numUniquePositions <= (1<< 8)) {
+            state.numIndices8Bits += geometryData._numTriangles * 3;
+        } else if (numUniquePositions <= (1<< 16)) {
+            // TODO: per-geometry?
+            state.numIndices16Bits += geometryData._numTriangles * 3;
+        } else {
+            // TODO: per-geometry?
+            state.numIndices32Bits += geometryData._numTriangles * 3;
+        }
+
+        // state.numIndices8Bits = buffer.indices8Bits.length;
+        // state.numIndices16Bits = buffer.indices16Bits.length;
+        // state.numIndices32Bits = buffer.indices32Bits.length;
+        
+        for (let i = 0, len = geometryData._numEdges; i < len; i++) {
+            if ((i % INDICES_EDGE_INDICES_ALIGNEMENT_SIZE) == 0) {
+                if (numUniquePositions <= (1<< 8)) {
+                    // TODO: per-geometry?
+                    buffer._portionIdForEdges8Bits.push (this._numPortions);
+                } else if (numUniquePositions <= (1<< 16)) {
+                    // TODO: per-geometry?
+                    buffer._portionIdForEdges16Bits.push (this._numPortions);
+                } else {
+                    // TODO: per-geometry?
+                    buffer._portionIdForEdges32Bits.push (this._numPortions);
+                }
+            }            
+        }
+
+        if (numUniquePositions <= (1<< 8)) {
+            state.numEdgeIndices8Bits += geometryData._numEdges * 3;
+        } else if (numUniquePositions <= (1<< 16)) {
+            // TODO: per-geometry?
+            state.numEdgeIndices16Bits += geometryData._numEdges * 3;
+        } else {
+            // TODO: per-geometry?
+            state.numEdgeIndices32Bits += geometryData._numEdges * 3;
+        }
+        // state.numEdgeIndices8Bits = buffer.edgeIndices8Bits.length;
+        // state.numEdgeIndices16Bits = buffer.edgeIndices16Bits.length;
+        // state.numEdgeIndices32Bits = buffer.edgeIndices32Bits.length;
 
         buffer._vertexBasesForObject.push (
             dataPerGeometry.vertexBase
@@ -478,21 +537,11 @@ class TrianglesInstancingLayer {
             color[1],
             color[2],
             opacity,
-        ])
+        ]);
 
         buffer._objectDataPickColors.push (pickColor);
 
         // TODO: find AABB for portion by transforming the geometry local AABB by the given meshMatrix?
-
-        // const r = color[0]; // Color is pre-quantized by PerformanceModel,
-        // const g = color[1];
-        // const b = color[2];
-        // const a = color[3];
-
-        // this._colors.push(r);
-        // this._colors.push(g);
-        // this._colors.push(b);
-        // this._colors.push(opacity);
 
         // this._metallicRoughness.push((metallic !== null && metallic !== undefined) ? metallic : 0);
         // this._metallicRoughness.push((roughness !== null && roughness !== undefined) ? roughness : 255);
@@ -503,48 +552,10 @@ class TrianglesInstancingLayer {
         //     this._offsets.push(0);
         // }
 
-        // this._modelMatrixCol0.push(meshMatrix[0]);
-        // this._modelMatrixCol0.push(meshMatrix[4]);
-        // this._modelMatrixCol0.push(meshMatrix[8]);
-        // this._modelMatrixCol0.push(meshMatrix[12]);
-
-        // this._modelMatrixCol1.push(meshMatrix[1]);
-        // this._modelMatrixCol1.push(meshMatrix[5]);
-        // this._modelMatrixCol1.push(meshMatrix[9]);
-        // this._modelMatrixCol1.push(meshMatrix[13]);
-
-        // this._modelMatrixCol2.push(meshMatrix[2]);
-        // this._modelMatrixCol2.push(meshMatrix[6]);
-        // this._modelMatrixCol2.push(meshMatrix[10]);
-        // this._modelMatrixCol2.push(meshMatrix[14]);
-
         // Mesh instance matrix
         buffer._objectDataInstanceGeometryMatrices.push (
             meshMatrix
         );
-
-        // if (this._state.normalsBuf) {
-
-        //     // Note: order of inverse and transpose doesn't matter
-
-        //     let transposedMat = math.transposeMat4(meshMatrix, math.mat4()); // TODO: Use cached matrix
-        //     let normalMatrix = math.inverseMat4(transposedMat);
-
-        //     this._modelNormalMatrixCol0.push(normalMatrix[0]);
-        //     this._modelNormalMatrixCol0.push(normalMatrix[4]);
-        //     this._modelNormalMatrixCol0.push(normalMatrix[8]);
-        //     this._modelNormalMatrixCol0.push(normalMatrix[12]);
-
-        //     this._modelNormalMatrixCol1.push(normalMatrix[1]);
-        //     this._modelNormalMatrixCol1.push(normalMatrix[5]);
-        //     this._modelNormalMatrixCol1.push(normalMatrix[9]);
-        //     this._modelNormalMatrixCol1.push(normalMatrix[13]);
-
-        //     this._modelNormalMatrixCol2.push(normalMatrix[2]);
-        //     this._modelNormalMatrixCol2.push(normalMatrix[6]);
-        //     this._modelNormalMatrixCol2.push(normalMatrix[10]);
-        //     this._modelNormalMatrixCol2.push(normalMatrix[14]);
-        // }
 
         // Mesh instance normal matrix
         {
@@ -556,13 +567,6 @@ class TrianglesInstancingLayer {
                 normalMatrix
             );
         }
-
-        // // Per-vertex pick colors
-
-        // this._pickColors.push(pickColor[0]);
-        // this._pickColors.push(pickColor[1]);
-        // this._pickColors.push(pickColor[2]);
-        // this._pickColors.push(pickColor[3]);
 
         // Expand AABB
         math.collapseAABB3(worldAABB);
@@ -582,21 +586,22 @@ class TrianglesInstancingLayer {
             }
         }
 
-        // if (this._state.origin) {
-        //     const origin = this._state.origin;
-        //     worldAABB[0] += origin[0];
-        //     worldAABB[1] += origin[1];
-        //     worldAABB[2] += origin[2];
-        //     worldAABB[3] += origin[0];
-        //     worldAABB[4] += origin[1];
-        //     worldAABB[5] += origin[2];
-        // }
+        const origin = this.getGeometryOrigin (geometryId);
+
+        if (origin) {
+            worldAABB[0] += origin[0];
+            worldAABB[1] += origin[1];
+            worldAABB[2] += origin[2];
+            worldAABB[3] += origin[0];
+            worldAABB[4] += origin[1];
+            worldAABB[5] += origin[2];
+        }
 
         math.expandAABB3(this.aabb, worldAABB);
 
         this._state.numInstances++;
 
-        const portionId = this._portions.length;
+        const portionId = this._numPortions;
 
         const portion = {};
 
@@ -617,6 +622,12 @@ class TrianglesInstancingLayer {
     finalize() {
         if (this._finalized) {
             throw "Already finalized";
+        }
+
+        this._finalized = true;
+
+        if (this._numPortions == 0) {
+            return;
         }
 
         const gl = this.model.scene.canvas.gl;
@@ -710,13 +721,13 @@ class TrianglesInstancingLayer {
             buffer.edgeIndices32Bits
         );
 
-        state.numIndices8Bits = buffer.indices8Bits.length;
-        state.numIndices16Bits = buffer.indices16Bits.length;
-        state.numIndices32Bits = buffer.indices32Bits.length;
+        // state.numIndices8Bits = buffer.indices8Bits.length;
+        // state.numIndices16Bits = buffer.indices16Bits.length;
+        // state.numIndices32Bits = buffer.indices32Bits.length;
 
-        state.numEdgeIndices8Bits = buffer.edgeIndices8Bits.length;
-        state.numEdgeIndices16Bits = buffer.edgeIndices16Bits.length;
-        state.numEdgeIndices32Bits = buffer.edgeIndices32Bits.length;
+        // state.numEdgeIndices8Bits = buffer.edgeIndices8Bits.length;
+        // state.numEdgeIndices16Bits = buffer.edgeIndices16Bits.length;
+        // state.numEdgeIndices32Bits = buffer.edgeIndices32Bits.length;
 
         // Model matrices texture
         if (!this.model._modelMatricesTexture)
@@ -727,6 +738,19 @@ class TrianglesInstancingLayer {
         }
 
         textureState.textureModelMatrices = this.model._modelMatricesTexture;
+
+        // Camera matrices texture
+        if (!this.model.cameraTexture)
+        {
+            this.model.cameraTexture = this.dataTextureGenerator.generateCameraDataTexture (
+                this.model.scene.canvas.gl,
+                this.model.scene.camera,
+                this.model.scene,
+                this._state.origin
+            );
+        }
+
+        this._dataTextureState.textureCameraMatrices = this.model.cameraTexture;
 
         this._buffer = null;
 
@@ -743,7 +767,6 @@ class TrianglesInstancingLayer {
         //     }
         // }
 
-        this._finalized = true;
     }
 
     // The following setters are called by PerformanceMesh, in turn called by PerformanceNode, only after the layer is finalized.
@@ -963,6 +986,10 @@ class TrianglesInstancingLayer {
     // }
 
     _setFlags(portionId, flags, meshTransparent) {
+        if (portionId < 0)
+        {
+            return;
+        }
 
         if (!this._finalized) {
             throw "Not finalized";
@@ -1037,6 +1064,8 @@ class TrianglesInstancingLayer {
         tempUint8Array4 [2] = f2;
         tempUint8Array4 [3] = f3;
 
+        // debugger;
+
         // object flags
         textureState.texturePerObjectIdColorsAndFlags._textureData.set (
             tempUint8Array4,
@@ -1067,6 +1096,10 @@ class TrianglesInstancingLayer {
     }
 
     _setFlags2(portionId, flags) {
+        if (portionId < 0)
+        {
+            return;
+        }
 
         if (!this._finalized) {
             throw "Not finalized";
