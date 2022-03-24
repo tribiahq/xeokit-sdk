@@ -1,5 +1,6 @@
 import {utils} from "../../viewer/scene/utils.js"
 import {PerformanceModel} from "../../viewer/scene/PerformanceModel/PerformanceModel.js";
+import {DataTexturePeformanceModel} from "../../viewer/scene/PerformanceModel/DataTexturePeformanceModel.js";
 import {Plugin} from "../../viewer/Plugin.js";
 import {XKTDefaultDataSource} from "./XKTDefaultDataSource.js";
 import {IFCObjectDefaults} from "../../viewer/metadata/IFCObjectDefaults.js";
@@ -654,6 +655,7 @@ class XKTLoaderPlugin extends Plugin {
      * all geometry instances into batches (````false````), and not use instancing to render them. Setting this ````false```` can significantly
      * improve Viewer performance for models that have excessive geometry reuse, but may also increases the amount of
      * browser and GPU memory used by the model. See [#769](https://github.com/xeokit/xeokit-sdk/issues/769) for more info.
+     * @param {Boolean} [params.useDataTextures=false] When we set this ````true````, an alternative memory representation of object geometry will be used that relies on data textures. At the expense of some rendering performance overhead, this will reduce the used RAM to around 25% respect to setting the option to ````false````.
      * @returns {Entity} Entity representing the model, which will have {@link Entity#isModel} set ````true```` and will be registered by {@link Entity#id} in {@link Scene#models}.
      */
     load(params = {}) {
@@ -663,11 +665,20 @@ class XKTLoaderPlugin extends Plugin {
             delete params.id;
         }
 
-        const performanceModel = new PerformanceModel(this.viewer.scene, utils.apply(params, {
-            isModel: true,
-            maxGeometryBatchSize: this._maxGeometryBatchSize,
-            origin: params.origin
-        }));
+        let performanceModel;
+
+        if (!!params.useDataTextures) {
+            performanceModel = new DataTexturePeformanceModel(this.viewer.scene, utils.apply(params, {
+                isModel: true,
+                origin: params.origin
+            }));
+        } else {
+            performanceModel = new PerformanceModel(this.viewer.scene, utils.apply(params, {
+                isModel: true,
+                maxGeometryBatchSize: this._maxGeometryBatchSize,
+                origin: params.origin
+            }));
+        }
 
         const modelId = performanceModel.id;  // In case ID was auto-generated
 

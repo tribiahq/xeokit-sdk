@@ -6,7 +6,7 @@ import {Spinner} from './Spinner.js';
 import {WEBGL_INFO} from '../webglInfo.js';
 
 const WEBGL_CONTEXT_NAMES = [
-    "webgl",
+    "webgl2", // data-textures
     "experimental-webgl",
     "webkit-3d",
     "moz-webgl",
@@ -516,7 +516,11 @@ class Canvas extends Component {
             } else {
                 if (WEBGL_INFO.SUPPORTED_EXTENSIONS["OES_standard_derivatives"]) {
                     const ext = this.gl.getExtension("OES_standard_derivatives");
-                    this.gl.hint(ext.FRAGMENT_SHADER_DERIVATIVE_HINT_OES, this.gl.FASTEST);
+
+                    // data-textures: not using standard-derivatives
+                    if (!(this.gl instanceof WebGL2RenderingContext)) {
+                        this.gl.hint(ext.FRAGMENT_SHADER_DERIVATIVE_HINT_OES, this.gl.FASTEST);
+                    }
                 }
                 if (WEBGL_INFO.SUPPORTED_EXTENSIONS["EXT_frag_depth"]) {
                     this.gl.getExtension('EXT_frag_depth');
