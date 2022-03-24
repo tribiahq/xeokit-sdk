@@ -275,18 +275,24 @@ const Renderer = function (scene, options) {
 
     function draw(params) {
 
-        if (WEBGL_INFO.SUPPORTED_EXTENSIONS["OES_element_index_uint"]) { // In case context lost/recovered
-            extensionHandles.OES_element_index_uint = gl.getExtension("OES_element_index_uint");
-        }
+        // Those extensions are availalble by default in WebGL v2:
+        // - https://developer.mozilla.org/en-US/docs/Web/API/OES_element_index_uint
+        // - https://developer.mozilla.org/en-US/docs/Web/API/EXT_frag_depth
+        // - https://developer.mozilla.org/en-US/docs/Web/API/WEBGL_depth_texture
 
-        if (scene.logarithmicDepthBufferEnabled && WEBGL_INFO.SUPPORTED_EXTENSIONS["EXT_frag_depth"]) {
-            extensionHandles.EXT_frag_depth = gl.getExtension('EXT_frag_depth');
-        }
+        if (!(gl instanceof WebGL2RenderingContext)) {
+            if (WEBGL_INFO.SUPPORTED_EXTENSIONS["OES_element_index_uint"]) { // In case context lost/recovered
+                extensionHandles.OES_element_index_uint = gl.getExtension("OES_element_index_uint");
+            }
 
-        if (WEBGL_INFO.SUPPORTED_EXTENSIONS["WEBGL_depth_texture"]) {
-            extensionHandles.WEBGL_depth_texture = gl.getExtension('WEBGL_depth_texture');
-        }
+            if (scene.logarithmicDepthBufferEnabled && WEBGL_INFO.SUPPORTED_EXTENSIONS["EXT_frag_depth"]) {
+                extensionHandles.EXT_frag_depth = gl.getExtension('EXT_frag_depth');
+            }
 
+            if (WEBGL_INFO.SUPPORTED_EXTENSIONS["WEBGL_depth_texture"]) {
+                extensionHandles.WEBGL_depth_texture = gl.getExtension('WEBGL_depth_texture');
+            }
+        }
         const sao = scene.sao;
 
         if (saoEnabled && sao.possible) {
