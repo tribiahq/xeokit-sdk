@@ -72,6 +72,9 @@ class Canvas extends Component {
          */
         this.transparent = !!cfg.transparent;
 
+        // data-textures: avoid to continuos DOM layout calculations
+        this.optimizeResizeDetection = true;
+
         /**
          * Attributes for the WebGL context
          *
@@ -167,12 +170,37 @@ class Canvas extends Component {
 
         let lastParent = null;
 
+        let tickCount = 0;
+
         this._tick = this.scene.on("tick", () => {
+
+            // data-textures: avoid to do continuous DOM layout calculations
+            tickCount++;
+
+            self._canvasSizeChanged = false;
+
+            if (self.optimizeResizeDetection)
+            {
+                if (tickCount < 60)
+                {
+                    return;
+                }
+            }
+
+            tickCount = 0; // chipmunk
 
             const canvas = this.canvas;
 
             const newResolutionScale = (this._resolutionScale !== lastResolutionScale);
             const newWindowSize = (window.innerWidth !== lastWindowWidth || window.innerHeight !== lastWindowHeight);
+
+            // data-textures: avoid to continuos DOM layout calculations
+            
+            if (!newWindowSize)
+            {
+                return;
+            }
+
             const newCanvasSize = (canvas.clientWidth !== lastCanvasWidth || canvas.clientHeight !== lastCanvasHeight);
             const newCanvasPos = (canvas.offsetLeft !== lastCanvasOffsetLeft || canvas.offsetTop !== lastCanvasOffsetTop);
 
@@ -181,6 +209,8 @@ class Canvas extends Component {
 
             if (newResolutionScale || newWindowSize || newCanvasSize || newCanvasPos || newParent) {
 
+                self._canvasSizeChanged = true;
+                
                 this._spinner._adjustPosition();
 
                 if (newResolutionScale || newCanvasSize || newCanvasPos) {
