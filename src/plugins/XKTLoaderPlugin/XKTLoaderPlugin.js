@@ -670,7 +670,8 @@ class XKTLoaderPlugin extends Plugin {
         if (!!params.useDataTextures) {
             performanceModel = new DataTexturePeformanceModel(this.viewer.scene, utils.apply(params, {
                 isModel: true,
-                origin: params.origin
+                origin: params.origin,
+                targetLodFps: params.useDataTextures.targetLodFps || false,
             }));
         } else {
             performanceModel = new PerformanceModel(this.viewer.scene, utils.apply(params, {
