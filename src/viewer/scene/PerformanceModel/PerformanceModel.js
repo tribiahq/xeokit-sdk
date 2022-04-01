@@ -19,6 +19,9 @@ import {utils} from "../utils.js";
 import {RenderFlags} from "../webgl/RenderFlags.js";
 import {worldToRTCPositions} from "../math/rtcCoords.js";
 
+import { LodCullingManager } from "./lib/layers/LodCullingManager.js";
+import { ViewFrustumCullingManager } from "./lib/layers/ViewFrustumCullingManager.js";
+
 const instancedArraysSupported = WEBGL_INFO.SUPPORTED_EXTENSIONS["ANGLE_instanced_arrays"];
 
 const tempVec3a = math.vec3();
@@ -948,6 +951,15 @@ class PerformanceModel extends Component {
     constructor(owner, cfg = {}) {
 
         super(owner, cfg);
+
+        this._targetLodFps = cfg.targetLodFps;
+
+        if (cfg.enableViewFrustumCulling) {
+            /**
+             * @type {ViewFrustumCullingManager}
+             */
+            this._vfcManager = new ViewFrustumCullingManager (this);
+        }
 
         this._maxGeometryBatchSize = cfg.maxGeometryBatchSize;
 
@@ -1923,6 +1935,19 @@ class PerformanceModel extends Component {
      * @param {Number} [cfg.opacity=1] Opacity in range ````[0..1]````.
      */
     createMesh(cfg) {
+        if (this._vfcManager && !this._vfcManager.finalized) {
+            if (cfg.color) {
+                cfg.color = cfg.color.slice ();
+            }
+
+            if (cfg.positionsDecodeMatrix) {
+                cfg.positionsDecodeMatrix = cfg.positionsDecodeMatrix.slice ();
+            }
+
+            this._vfcManager.addMesh (cfg);
+
+            return;
+        }
 
         let id = cfg.id;
         if (id === undefined || id === null) {
@@ -2293,6 +2318,11 @@ class PerformanceModel extends Component {
      * @returns {Entity}
      */
     createEntity(cfg) {
+        if (this._vfcManager && !this._vfcManager.finalized) {
+            this._vfcManager.addEntity (cfg);
+            return;
+        }
+
         // Validate or generate Entity ID
         let id = cfg.id;
         if (id === undefined) {
@@ -2382,6 +2412,22 @@ class PerformanceModel extends Component {
             return;
         }
 
+        if (this._vfcManager) {
+            const self = this;
+
+            this._vfcManager.finalize (
+                function () {
+                    ["triangles", "solid", "surface"].map(primitiveId => {
+                        if (self._currentBatchingLayers[primitiveId]) {
+                            self._currentBatchingLayers[primitiveId].finalize();
+                            delete self._currentBatchingLayers[primitiveId];
+                        }
+                    });
+                    self._currentBatchingLayers = {};
+                }
+            );
+        }
+
         for (const geometryId in this._instancingLayers) {
             if (this._instancingLayers.hasOwnProperty(geometryId)) {
                 this._instancingLayers[geometryId].finalize();
@@ -2426,6 +2472,14 @@ class PerformanceModel extends Component {
         this.glRedraw();
 
         this.scene._aabbDirty = true;
+
+        if (this._targetLodFps) {
+            this.lodCullingManager = new LodCullingManager (
+                this,
+                [ 2000, 600, 150, 80, 20 ],
+                this._targetLodFps
+            );
+        }
     }
 
     _rebuildAABB() {

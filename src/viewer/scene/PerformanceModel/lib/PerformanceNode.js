@@ -73,6 +73,10 @@ class PerformanceNode {
         this._colorizeUpdated = false;
         this._opacityUpdated = false;
 
+        this._culled = false;
+        this._culledVFC = false;
+        this._culledLOD = false;
+
         if (this._isObject) {
             model.scene._registerObject(this);
         }
@@ -317,6 +321,24 @@ class PerformanceNode {
         this.model.glRedraw();
     }
 
+    get culledVFC() {
+        return !!(this._culledVFC);
+    }
+
+    set culledVFC(culled) {
+        this._culledVFC = culled;
+        this.internalSetCulled ();
+    }
+
+    get culledLOD() {
+        return !!(this._culledLOD);
+    }
+
+    set culledLOD(culled) {
+        this._culledLOD = culled;
+        this.internalSetCulled ();
+    }
+
     /**
      * Gets if this PerformanceNode is culled.
      *
@@ -325,7 +347,8 @@ class PerformanceNode {
      * @type {Boolean}
      */
     get culled() {
-        return this._getFlag(ENTITY_FLAGS.CULLED);
+        return !!(this._culled);
+        // return this._getFlag(ENTITY_FLAGS.CULLED);
     }
 
     /**
@@ -336,6 +359,14 @@ class PerformanceNode {
      * @type {Boolean}
      */
     set culled(culled) {
+        this._culled = culled;
+        this.internalSetCulled ();
+    }
+
+    internalSetCulled()
+    {
+        let culled = !!(this._culled) || !!(this._culledLOD) || !!(this._culledVFC);
+
         if (!!(this._flags & ENTITY_FLAGS.CULLED) === culled) {
             return; // Redundant update
         }

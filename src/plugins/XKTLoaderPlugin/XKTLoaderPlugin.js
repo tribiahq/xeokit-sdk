@@ -666,7 +666,9 @@ class XKTLoaderPlugin extends Plugin {
         const performanceModel = new PerformanceModel(this.viewer.scene, utils.apply(params, {
             isModel: true,
             maxGeometryBatchSize: this._maxGeometryBatchSize,
-            origin: params.origin
+            origin: params.origin,
+            targetLodFps: params.targetLodFps || false,
+            enableViewFrustumCulling: params.enableViewFrustumCulling || false,
         }));
 
         const modelId = performanceModel.id;  // In case ID was auto-generated
