@@ -3,8 +3,8 @@
  * @license MIT
  */
 
-import {math} from "../../../../math/math.js";
-import {geometryCompressionUtils} from "../../../../math/geometryCompressionUtils.js";
+import {math} from "../../../../../math/math.js";
+import {geometryCompressionUtils} from "../../../../../math/geometryCompressionUtils.js";
 import {RBush3D} from "./rbush3d.js";
 
 import {makeClusters} from "./xeokit-cluster.js"

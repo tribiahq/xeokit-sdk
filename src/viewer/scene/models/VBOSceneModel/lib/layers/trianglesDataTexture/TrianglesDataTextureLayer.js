@@ -1,11 +1,11 @@
-import {WEBGL_INFO} from "../../../../webglInfo.js";
+import {WEBGL_INFO} from "../../../../../webglInfo.js";
 import {ENTITY_FLAGS} from '../../ENTITY_FLAGS.js';
 import {RENDER_PASSES} from '../../RENDER_PASSES.js';
 
-import {math} from "../../../../math/math.js";
-import {RenderState} from "../../../../webgl/RenderState.js";
-import {ArrayBuf} from "../../../../webgl/ArrayBuf.js";
-import {geometryCompressionUtils} from "../../../../math/geometryCompressionUtils.js";
+import {math} from "../../../../../math/math.js";
+import {RenderState} from "../../../../../webgl/RenderState.js";
+import {ArrayBuf} from "../../../../../webgl/ArrayBuf.js";
+import {geometryCompressionUtils} from "../../../../../math/geometryCompressionUtils.js";
 import {getDataTextureRenderers} from "./TrianglesDataTextureRenderers.js";
 import {TrianglesDataTextureBuffer} from "./TrianglesDataTextureBuffer.js";
 import {quantizePositions, transformAndOctEncodeNormals} from "../../compression.js";
@@ -1728,7 +1728,7 @@ function prepareMeshGeometry (geometryCfg) {
         uniqueIndices,
         uniqueEdgeIndices,
     ] = uniquifyPositions.uniquifyPositions ({
-        positions: geometryCfg.positions,
+        positions: geometryCfg.positionsCompressed,
         indices: geometryCfg.indices,
         edgeIndices: geometryCfg.edgeIndices
     });
